@@ -1,5 +1,6 @@
 use string_interner::{DefaultSymbol, StringInterner};
 use string_interner::backend::StringBackend;
+
 use std::fmt::{Display, Formatter};
 use std::borrow::Cow;
 use std::cmp::Ordering;

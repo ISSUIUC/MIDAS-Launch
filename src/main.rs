@@ -106,12 +106,17 @@ struct App {
 
     visual_state: VisualState,
     table_tab: TableTab,
-    plot_tab: PlotTab
+    plot_tab: PlotTab,
+
+    is_maximized: bool
 }
 
 impl App {
     fn new(cc: &eframe::CreationContext) -> App {
-        cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+        let was_maximized = cc.storage.and_then(|store| store.get_string("was-maximized")).map_or(false, |s| s == "true");
+        if was_maximized {
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+        }
 
         App {
             left_state: LeftState::Import,
@@ -123,7 +128,9 @@ impl App {
 
             visual_state: VisualState::Table,
             table_tab: TableTab::new(cc),
-            plot_tab: PlotTab::new(cc)
+            plot_tab: PlotTab::new(cc),
+
+            is_maximized: was_maximized
         }
     }
 }
@@ -131,6 +138,8 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        self.is_maximized = ctx.input(|state| state.viewport().maximized.unwrap_or(false));
+
         ctx.set_visuals(Visuals::light());
 
         egui::SidePanel::new(Side::Left, "left-panel")
@@ -311,14 +320,14 @@ impl eframe::App for App {
     }
 
     fn save(&mut self, storage: &mut dyn Storage) {
+        storage.set_string("was-maximized", self.is_maximized.to_string());
+
         self.import_tab.save(storage);
         self.process_tab.save(storage);
         self.export_tab.save(storage);
     }
 
-    fn persist_egui_memory(&self) -> bool {
-        false
-    }
+    fn persist_egui_memory(&self) -> bool { false }
 }
 
 #[derive(Clone)]
@@ -1173,13 +1182,12 @@ impl ExportTab {
 
 
 fn main() -> eframe::Result<()> {
+    let mut viewport = egui::ViewportBuilder::default();
     let options = eframe::NativeOptions {
         centered: true,
-        // viewport: egui::ViewportBuilder {
-        //     maximized: Some(true),
-        //     ..Default::default()
-        // },
+        // persist_window: true,
+        viewport,
         ..Default::default()
     };
-    eframe::run_native("Log Parser", options, Box::new(|cc| Box::new(App::new(cc))))
+    eframe::run_native("MIDAS Launch", options, Box::new(|cc| Box::new(App::new(cc))))
 }

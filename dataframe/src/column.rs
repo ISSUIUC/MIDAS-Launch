@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use crate::dataframe::data::{Data, DataType};
+use crate::data::{Data, DataType};
 
 pub trait Column {
     fn name(&self) -> &str;

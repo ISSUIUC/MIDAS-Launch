@@ -1,12 +1,21 @@
+[workspace]
+members = [ "dataframe", "launch_file" ]
+resolver = "2"
+
 [package]
-name = "egui-log-parser"
-version = "0.1.0"
+name = "MIDAS-Launch"
+version = "1.0.0"
 edition = "2021"
+rust-version = "1.76.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-egui = { version = "0.27.2" }
-eframe = { version = "0.27.2" }
+dataframe = { path = "dataframe" }
+launch_file = { path = "launch_file" }
+egui = { version = "0.27.2", features = ["persistence"] }
+egui_extras = { version = "0.27.2"}
+egui_plot = { version = "0.27.2" }
+eframe = { version = "0.27.2", features = ["persistence"] }
 rfd = "0.14.1"
-futures = "0.3.30"
+futures-lite = { version = "2.3.0" }

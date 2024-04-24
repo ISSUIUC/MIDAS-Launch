@@ -1,8 +1,9 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
-use super::data::{Data, DataType};
-use super::{DataFrame, Shape};
-use super::column::{Column, ColumnInternal, ColumnMut, ColumnMutInternal};
+
+use crate::data::{Data, DataType};
+use crate::{DataFrame, Shape};
+use crate::column::{Column, ColumnInternal, ColumnMut, ColumnMutInternal};
 
 pub struct ColumnView<'a, C>(&'a Vec<usize>, &'a C);
 pub struct ColumnViewMut<'a, C>(&'a mut Vec<usize>, &'a mut C);

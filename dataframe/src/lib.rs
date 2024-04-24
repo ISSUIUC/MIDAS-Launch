@@ -1,14 +1,17 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+mod column;
+mod view;
+mod buffer;
+mod data;
+
+pub use view::{DataFrameView, ColumnView, ColumnViewMut};
+pub use buffer::DataFrame;
+pub use data::{Data, DataType};
+pub use column::{Column, ColumnMut};
+
+
+#[derive(Copy, Clone, Debug)]
+pub struct Shape {
+    pub rows: usize,
+    pub cols: usize
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
