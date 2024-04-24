@@ -3,7 +3,7 @@ members = [ "dataframe", "launch_file" ]
 resolver = "2"
 
 [package]
-name = "MIDAS-Launch"
+name = "midas-launch"
 version = "1.0.0"
 edition = "2021"
 rust-version = "1.76.0"

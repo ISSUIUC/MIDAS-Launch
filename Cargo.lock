@@ -3,20 +3,6 @@
 version = 3
 
 [[package]]
-name = "MIDAS-Launch"
-version = "1.0.0"
-dependencies = [
- "dataframe",
- "eframe",
- "egui",
- "egui_extras",
- "egui_plot",
- "futures-lite 2.3.0",
- "launch_file",
- "rfd",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1982,6 +1968,20 @@ dependencies = [
  "log",
  "objc",
  "paste",
+]
+
+[[package]]
+name = "midas-launch"
+version = "1.0.0"
+dependencies = [
+ "dataframe",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "egui_plot",
+ "futures-lite 2.3.0",
+ "launch_file",
+ "rfd",
 ]
 
 [[package]]
