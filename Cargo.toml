@@ -6,7 +6,7 @@ resolver = "2"
 name = "midas-launch"
 version = "1.0.0"
 edition = "2021"
-rust-version = "1.76.0"
+rust-version = "1.77.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
