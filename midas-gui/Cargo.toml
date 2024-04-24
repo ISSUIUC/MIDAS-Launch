@@ -1,0 +1,17 @@
+[package]
+name = "midas"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.76.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dataframe = { path = "../dataframe" }
+launch_file = { path = "../launch_file" }
+egui = { version = "0.27.2", features = ["persistence", "log"] }
+egui_extras = { version = "0.27.2"}
+egui_plot = { version = "0.27.2" }
+eframe = { version = "0.27.2" }
+rfd = "0.14.1"
+futures-lite = { version = "2.3.0" }
