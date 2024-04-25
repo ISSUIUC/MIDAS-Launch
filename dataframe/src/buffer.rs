@@ -7,8 +7,8 @@ use super::data::{ColumnData, Data, DataType, Enum, Float, Integer};
 
 #[derive(Clone)]
 pub struct DataFrame {
-    pub(super) columns: Vec<ColumnBuffer>,
-    pub(super) rows: usize
+    pub(crate) columns: Vec<ColumnVariants>,
+    pub(crate) rows: usize
 }
 
 impl DataFrame {
@@ -25,23 +25,23 @@ impl DataFrame {
 
     pub fn hint_complete(&mut self) {
         for col in &mut self.columns {
-            col.0.hint_complete();
+            col.hint_complete();
         }
     }
 
     pub fn add_null_col(&mut self, name: impl Into<String>, ty: DataType) -> usize {
         let idx = self.columns.len();
         match ty {
-            DataType::Integer => self.columns.push(ColumnBuffer(GenericColumn::<Integer>::new_null(name, self.rows).into())),
-            DataType::Enum => self.columns.push(ColumnBuffer(GenericColumn::<Enum>::new_null(name, self.rows).into())),
-            DataType::Float => self.columns.push(ColumnBuffer(GenericColumn::<Float>::new_null(name, self.rows).into())),
+            DataType::Integer => self.columns.push(GenericColumn::<Integer>::new_null(name, self.rows).into()),
+            DataType::Enum => self.columns.push(GenericColumn::<Enum>::new_null(name, self.rows).into()),
+            DataType::Float => self.columns.push(GenericColumn::<Float>::new_null(name, self.rows).into()),
         }
         idx
     }
 
     pub fn add_null_row(&mut self) {
         for col in self.columns.iter_mut() {
-            col.0.push_data(&Data::Null)
+            col.push_data(&Data::Null)
         }
         self.rows += 1;
     }
@@ -49,7 +49,7 @@ impl DataFrame {
     pub fn add_row(&mut self, row: &[Data]) {
         assert_eq!(row.len(), self.columns.len());
         for (col, item) in self.columns.iter_mut().zip(row) {
-            col.0.push_data(item);
+            col.push_data(item);
         }
         self.rows += 1;
     }
@@ -59,7 +59,7 @@ impl DataFrame {
     }
 
     pub fn row_iter(&self, index: usize) -> impl Iterator<Item=Data> {
-        self.columns.iter().map(move |col| col.0.get_row_data(index))
+        self.columns.iter().map(move |col| col.get_row_data(index))
     }
 }
 
@@ -128,39 +128,35 @@ impl<D: ColumnData> ColumnMutInternal for GenericColumn<D> {
     }
 }
 
-
 #[derive(Clone)]
-pub struct ColumnBuffer(ColumnVariants);
-
-impl Column for ColumnBuffer {
-    fn name(&self) -> &str { self.0.name() }
-    fn len(&self) -> usize { self.0.len() }
-    fn data_type(&self) -> DataType { self.0.data_type() }
-    fn get_row_data(&self, index: usize) -> Data { self.0.get_row_data(index) }
-
-    fn compare(&self, a: usize, b: usize) -> Ordering {
-        self.0.compare(a, b)
-    }
-}
-
-impl ColumnMut for ColumnBuffer {
-    fn set_row_data(&mut self, index: usize, data: &Data) { self.0.set_row_data(index, data) }
-}
-
-impl ColumnInternal for ColumnBuffer {
-    fn underlying_rows(&self) -> usize { self.0.underlying_rows() }
-}
-
-impl ColumnMutInternal for ColumnBuffer {
-    fn hint_complete(&mut self) { self.0.hint_complete() }
-    fn push_data(&mut self, item: &Data) { self.0.push_data(item) }
-}
-
-#[derive(Clone)]
-enum ColumnVariants {
+pub(crate) enum ColumnVariants {
     Integer(GenericColumn<Integer>),
     Enum(GenericColumn<Enum>),
     Float(GenericColumn<Float>),
+}
+
+impl Column for ColumnVariants {
+    fn name(&self) -> &str { self.deref().name() }
+    fn len(&self) -> usize { self.deref().len() }
+    fn data_type(&self) -> DataType { self.deref().data_type() }
+    fn get_row_data(&self, index: usize) -> Data { self.deref().get_row_data(index) }
+
+    fn compare(&self, a: usize, b: usize) -> Ordering {
+        self.deref().compare(a, b)
+    }
+}
+
+impl ColumnMut for ColumnVariants {
+    fn set_row_data(&mut self, index: usize, data: &Data) { self.deref_mut().set_row_data(index, data) }
+}
+
+impl ColumnInternal for ColumnVariants {
+    fn underlying_rows(&self) -> usize { self.deref().underlying_rows() }
+}
+
+impl ColumnMutInternal for ColumnVariants {
+    fn hint_complete(&mut self) { self.deref_mut().hint_complete() }
+    fn push_data(&mut self, item: &Data) { self.deref_mut().push_data(item) }
 }
 
 impl Deref for ColumnVariants {
