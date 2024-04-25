@@ -114,8 +114,7 @@ impl LogFormat {
 
         let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
 
-        let result: io::Error = try_catch!({
-            let mut i = 0;
+        let result: io::Result<()> = try_catch!({
             let mut row = vec![Data::Null; num_cols];
             loop {
                 row.fill(Data::Null);
@@ -133,13 +132,10 @@ impl LogFormat {
                 offset += fast_format.size as u64;
 
                 dataframe.add_row(&row);
-
-                i += 1;
                 on_row_callback(offset);
             }
-
-            Ok(())
-        }).unwrap_err();
+        });
+        let result = result.unwrap_err();
 
         dataframe.hint_complete();
 

@@ -64,7 +64,7 @@ impl DataFrame {
 }
 
 #[derive(Clone)]
-struct GenericColumn<D: ColumnData> {
+pub(crate) struct GenericColumn<D: ColumnData> {
     ctx: D::Context,
     name: String,
     items: Vec<D>

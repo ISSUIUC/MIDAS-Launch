@@ -36,11 +36,6 @@ enum VisualState {
     Table
 }
 
-struct PlotInfo {
-    x_col: usize,
-    y_col: usize,
-}
-
 struct TableTab {
 
 }
@@ -236,7 +231,7 @@ impl eframe::App for App {
                 .resizable(true)
                 .default_width(180.0)
                 .width_range(180.0..=480.0)
-                .show_animated(ctx, false, |ui| { });
+                .show_animated(ctx, false, |_| ());
         }
 
 
@@ -1182,11 +1177,11 @@ impl ExportTab {
 
 
 fn main() -> eframe::Result<()> {
-    let mut viewport = egui::ViewportBuilder::default();
+    // let mut viewport = egui::ViewportBuilder::default();
     let options = eframe::NativeOptions {
         centered: true,
         // persist_window: true,
-        viewport,
+        // viewport,
         ..Default::default()
     };
     eframe::run_native("MIDAS Launch", options, Box::new(|cc| Box::new(App::new(cc))))
