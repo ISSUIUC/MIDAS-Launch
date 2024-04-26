@@ -83,15 +83,15 @@ impl DataFrameView {
     }
 
     pub fn col_names(&self) -> impl Iterator<Item=&str> {
-        self.df.columns.iter().map(|col| col.name())
+        self.df.cols().iter().map(|col| col.name())
     }
 
     pub fn col_name(&self, idx: usize) -> &str {
-        self.df.columns[idx].name()
+        self.df.cols()[idx].name()
     }
 
     pub fn col(&self, idx: usize) -> ColumnView<'_, impl Column> {
-        ColumnView(&self.rows, &self.df.columns[idx])
+        ColumnView(&self.rows, &self.df.cols()[idx])
     }
 
     pub fn col_mut(&mut self, idx: usize) -> ColumnViewMut<'_, impl ColumnMut> {

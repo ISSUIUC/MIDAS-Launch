@@ -1,19 +1,145 @@
 use std::cmp::Ordering;
+use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
+use smallvec::{SmallVec, smallvec};
 
 use super::Shape;
 use super::column::{Column, ColumnInternal, ColumnMut, ColumnMutInternal};
 use super::data::{ColumnData, Data, DataType, Enum, Float, Integer};
 
+
+// pub type DataFrame = DataFrameOld;
+pub type DataFrame = DataFrameNew;
+
 #[derive(Clone)]
-pub struct DataFrame {
+struct DataItem {
+    which: u8,
+    mem: [u8;8]
+}
+
+impl DataItem {
+    fn as_data(&self, ty: DataType) -> Data {
+        unsafe { match ty {
+            DataType::Integer => Data::Integer(transmute(self.mem)),
+            DataType::Float => Data::Float(transmute(self.mem)),
+            DataType::Enum => Data::Str("Nostr")
+        } }
+    }
+
+    fn new(x: Data, which: u8) -> Self {
+        let buff: [u8;8] = unsafe { match x {
+            Data::Integer(i) => transmute(i),
+            Data::Str(_) => transmute(0i64),
+            Data::Float(f) => transmute(f),
+            Data::Null => [0;8]
+        }};
+
+        Self {
+            which,
+            mem: buff
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct DataFrameNew {
+    pub(crate) columns: Vec<NewColumn>,
+    items: Vec<SmallVec<[DataItem;5]>>
+}
+
+impl DataFrameNew {
+    pub fn new() -> Self {
+        Self {
+            columns: vec![],
+            items: vec![]
+        }
+    }
+
+    pub fn shape(&self) -> Shape {
+        Shape { rows: self.items.len(), cols: self.columns.len() }
+    }
+
+    pub fn hint_complete(&mut self) {}
+
+    pub fn add_null_col(&mut self, name: impl Into<String>, ty: DataType) -> usize {
+        self.columns.push(NewColumn{name: name.into(),which:0,ty});
+        assert!(self.columns.len() < u8::MAX as usize);
+        self.columns.len() - 1
+
+    }
+
+    pub fn add_null_row(&mut self, row: &[Data]) {
+        self.items.push(smallvec![]);
+    }
+
+    pub fn add_row(&mut self, row: &[Data]) {
+        self.items.push(row.iter().enumerate()
+                            .filter(|(i,x)|!x.is_null())
+                            .map(|(i,&x)|DataItem::new(x,i as u8))
+                            .collect()
+        );
+    }
+
+    pub fn cols(&self) -> &[impl Column] {
+        &self.columns
+    }
+
+    pub fn row_iter(&self, index: usize) -> impl Iterator<Item=Data> {
+        let row = &self.items[index];
+        self.columns.iter().enumerate().map(|(i,c)|{
+            if let Some(item) = row.iter().find(|x|x.which as usize == i) {
+                item.as_data(c.ty)
+            } else {
+                Data::Null
+            }
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct NewColumn {
+    name: String,
+    which: u32,
+    ty: DataType,
+}
+
+impl Column for NewColumn {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn len(&self) -> usize {
+        todo!()
+    }
+
+    fn data_type(&self) -> DataType {
+        todo!()
+    }
+
+    fn get_row_data(&self, index: usize) -> Data {
+        todo!()
+    }
+
+    fn compare(&self, a: usize, b: usize) -> Ordering {
+        todo!()
+    }
+}
+
+impl ColumnMut for NewColumn {
+    fn set_row_data(&mut self, index: usize, data: &Data) {
+        todo!()
+    }
+}
+
+#[derive(Clone)]
+pub struct DataFrameOld {
     pub(crate) columns: Vec<ColumnVariants>,
     pub(crate) rows: usize
 }
 
-impl DataFrame {
-    pub fn new() -> DataFrame {
-        DataFrame {
+impl DataFrameOld {
+    pub fn new() -> Self {
+        Self {
             columns: vec![],
             rows: 0
         }

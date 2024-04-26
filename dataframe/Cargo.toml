@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 string-interner = "0.15.0"
+smallvec = "1.13"
