@@ -1,4 +1,6 @@
 use std::cmp::Ordering;
+use std::io;
+use std::io::BufRead;
 use std::ops::{Deref, DerefMut};
 
 use super::Shape;
@@ -60,6 +62,66 @@ impl DataFrame {
 
     pub fn row_iter(&self, index: usize) -> impl Iterator<Item=Data> {
         self.columns.iter().map(move |col| col.get_row_data(index))
+    }
+}
+
+impl DataFrame {
+    pub fn from_csv(file: &mut impl BufRead, mut on_row_callback: impl FnMut(usize)) -> io::Result<Self> {
+        let mut offset = 0;
+        let mut df = Self::new();
+        let mut header = String::new();
+        offset += file.read_line(&mut header)?;
+
+        let error: io::Result<()> = (|| {
+            let mut row_buf = String::new();
+            let mut row_data = Vec::new();
+            let mut data_types = Vec::new();
+
+            offset += file.read_line(&mut row_buf)?;
+            for (col_name, item) in header.trim_end_matches('\n').split(',').zip(row_buf.trim_end_matches('\n').split(',')) {
+                // if let Ok(as_integer) = item.parse::<i64>() {
+                //     df.add_null_col(col_name, DataType::Integer);
+                //     row_data.push(Data::Integer(as_integer));
+                //     data_types.push(DataType::Integer);
+                // } else
+                if let Ok(as_float) = item.parse::<f64>() {
+                    df.add_null_col(col_name, DataType::Float);
+                    row_data.push(Data::Float(as_float));
+                    data_types.push(DataType::Float);
+                } else {
+                    df.add_null_col(col_name, DataType::Enum);
+                    row_data.push(Data::Str(item));
+                    data_types.push(DataType::Enum);
+                }
+            }
+            df.add_row(&row_data);
+            on_row_callback(offset);
+
+            loop {
+                let mut row_data = Vec::new();
+                row_buf.clear();
+                let amount = file.read_line(&mut row_buf)?;
+                if amount == 0 {
+                    return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+                }
+                offset += amount;
+                for (dtype, item) in data_types.iter().zip(row_buf.trim_end_matches('\n').split(',')) {
+                    row_data.push(dtype.parse_str(item));
+                }
+                if row_data.len() != df.cols().len() {
+                    return Err(io::Error::other("Malformed CSV file."));
+                }
+                df.add_row(&row_data);
+                on_row_callback(offset);
+            }
+        })();
+        let error = error.unwrap_err();
+
+        if error.kind() == io::ErrorKind::UnexpectedEof {
+            Ok(df)
+        } else {
+            Err(error)
+        }
     }
 }
 

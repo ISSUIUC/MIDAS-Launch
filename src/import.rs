@@ -14,7 +14,56 @@ use crate::DataShared;
 use crate::ProgressTask;
 use crate::file_picker::FilePicker;
 
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum ImportFrom {
+    Launch,
+    CSV
+}
+
 pub struct ImportTab {
+    state: ImportFrom,
+
+    import_launch_tab: ImportLaunchTab,
+    import_csv_tab: ImportCSVTab
+}
+
+impl ImportTab {
+    pub fn new(cc: &eframe::CreationContext) -> Self {
+        Self {
+            state: ImportFrom::Launch,
+            import_launch_tab: ImportLaunchTab::new(cc),
+            import_csv_tab: ImportCSVTab::new(cc)
+        }
+    }
+
+    pub fn save(&self, storage: &mut dyn Storage) {
+        self.import_launch_tab.save(storage);
+        self.import_csv_tab.save(storage);
+    }
+
+    pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
+        // ui.columns(2, |cols| {
+        //     cols[0].vertical_centered_justified(|ui| {
+        //         ui.selectable_value(&mut self.state, ImportFrom::Launch, ".launch File");
+        //     });
+        //     cols[1].vertical_centered_justified(|ui| {
+        //         ui.selectable_value(&mut self.state, ImportFrom::CSV, ".csv File");
+        //     });
+        // });
+        ui.horizontal(|ui| {
+            ui.label("Source type:");
+            ui.selectable_value(&mut self.state, ImportFrom::Launch, ".launch File");
+            ui.selectable_value(&mut self.state, ImportFrom::CSV, ".csv File");
+        });
+
+        match self.state {
+            ImportFrom::Launch => self.import_launch_tab.show(ui, shared),
+            ImportFrom::CSV => self.import_csv_tab.show(ui, shared)
+        }
+    }
+}
+
+struct ImportLaunchTab {
     source_path: String,
     inspect_source_task: Option<JoinHandle<Result<u32, String>>>,
     inspected_checksum: Option<u32>,
@@ -30,13 +79,13 @@ pub struct ImportTab {
     parsing_message: Option<String>
 }
 
-impl ImportTab {
-    pub fn new(cc: &eframe::CreationContext) -> ImportTab {
+impl ImportLaunchTab {
+    pub fn new(cc: &eframe::CreationContext) -> ImportLaunchTab {
         let source_path = cc.storage.and_then(|storage| storage.get_string("import-source-path")).unwrap_or("".to_string());
         let format_path = cc.storage.and_then(|storage| storage.get_string("import-format-path")).unwrap_or("".to_string());
         let python_command = cc.storage.and_then(|storage| storage.get_string("import-python-command")).unwrap_or("python".to_string());
 
-        ImportTab {
+        ImportLaunchTab {
             source_path,
             inspect_source_task: None,
             inspected_checksum: None,
@@ -200,6 +249,83 @@ impl ImportTab {
                     }
                 } else {
                     ui.add_enabled(false, egui::Button::new("Load Data")).on_disabled_hover_text("Choose data and load format.");
+                }
+            }
+
+            if let Some(msg) = &self.parsing_message {
+                ui.colored_label(Color32::RED, "!").on_hover_text(msg);
+            }
+        });
+    }
+}
+
+
+struct ImportCSVTab {
+    source_path: String,
+
+    parsing: Option<ProgressTask<Result<DataFrame, io::Error>>>,
+    parsing_message: Option<String>
+}
+
+impl ImportCSVTab {
+    pub fn new(_cc: &eframe::CreationContext) -> Self {
+        Self {
+            source_path: String::new(),
+            parsing: None,
+            parsing_message: None
+        }
+    }
+
+    pub fn save(&self, _storage: &mut dyn Storage) { }
+
+    pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
+        ui.add(FilePicker::new("data-csv-file-picker", &mut self.source_path)
+            .dialog_title("Data File")
+            .add_filter("CSV", &["csv"])
+            // .add_filter("Any", &[])
+        );
+
+        ui.add_space(3.0);
+
+        ui.horizontal(|ui| {
+            if let Some(task) = &self.parsing {
+                if task.is_finished() {
+                    let result = self.parsing.take().unwrap().handle.join().unwrap();
+                    match result {
+                        Ok(dataframe) => {
+                            shared.replace(DataShared::new(DataFrameView::from_dataframe(dataframe)));
+                        }
+                        Err(e) => {
+                            self.parsing_message = Some(e.to_string());
+                        }
+                    }
+                }
+            }
+
+            if let Some(task) = &self.parsing {
+                ui.add_enabled(false, egui::Button::new("Loading"));
+
+                ui.add(egui::ProgressBar::new(task.progress()).show_percentage());
+            } else {
+                if !self.source_path.is_empty() {
+                    let response = ui.add_enabled(true, egui::Button::new("Load Data"));
+
+                    if response.clicked() {
+                        self.parsing_message = None;
+                        shared.take();
+                        let source_path = self.source_path.clone();
+
+                        self.parsing = Some(ProgressTask::new(ui.ctx(), move |progress| {
+                            let mut file = BufReader::new(File::open(source_path)?);
+                            let size: u64 = file.get_ref().metadata().map_or(0, |m| m.len());
+
+                            DataFrame::from_csv(&mut file, |offset| {
+                                progress.set(offset as f32 / size as f32);
+                            })
+                        }));
+                    }
+                } else {
+                    ui.add_enabled(false, egui::Button::new("Load Data")).on_disabled_hover_text("Choose data.");
                 }
             }
 
