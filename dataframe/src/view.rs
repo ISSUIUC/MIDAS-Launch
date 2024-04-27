@@ -51,6 +51,10 @@ impl<'a, C: ColumnInternal> ColumnInternal for ColumnViewMut<'a, C> {
 }
 
 impl<'a, C: ColumnMutInternal> ColumnMutInternal for ColumnViewMut<'a, C> {
+    fn hint_rows(&mut self, rows: usize) {
+        self.1.hint_rows(rows);
+    }
+
     fn hint_complete(&mut self) { self.1.hint_complete() }
 
     fn push_data(&mut self, item: &Data) {

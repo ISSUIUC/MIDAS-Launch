@@ -95,17 +95,22 @@ impl LogFormat {
         Ok(format)
     }
 
-    pub fn read_file(&self, file: &mut impl Read, mut on_row_callback: impl FnMut(u64)) -> io::Result<DataFrame> {
+    pub fn read_file(&self, file: &mut impl Read, file_size: Option<u64>, mut on_row_callback: impl FnMut(u64)) -> io::Result<DataFrame> {
         let mut dataframe = DataFrame::new();
         dataframe.add_null_col("sensor", DataType::Enum);
         dataframe.add_null_col("timestamp", DataType::Integer);
 
         let mut variants: HashMap<u32, (String, Deserializer)> = HashMap::new();
+        let mut smallest = usize::MAX;
         for (name, (disc, format)) in &self.variants {
             let mut builder = DeserializerBuilder::new(&mut dataframe);
             format.to_fast(&mut builder, name);
             let fast_format = builder.finish();
+            smallest = smallest.min(fast_format.size).max(1);
             variants.insert(*disc, (name.clone(), fast_format));
+        }
+        if let Some(file_size) = file_size {
+            dataframe.hint_rows((file_size / (smallest as u64 + 8)) as usize);
         }
 
         let num_cols = dataframe.shape().cols;

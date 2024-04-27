@@ -20,6 +20,7 @@ pub trait ColumnMut: Column {
 }
 
 pub(crate) trait ColumnMutInternal: ColumnMut + ColumnInternal {
+    fn hint_rows(&mut self, rows: usize);
     fn hint_complete(&mut self);
     fn push_data(&mut self, item: &Data);
 }

@@ -35,11 +35,11 @@ pub trait ColumnData: Copy + Eq + 'static {
 
 #[derive(Copy, Clone, Default, Debug)]
 pub enum Data<'a> {
+    #[default]
+    Null,
     Integer(i64),
     Str(&'a str),
     Float(f64),
-    #[default]
-    Null
 }
 
 impl<'a> Data<'a> {

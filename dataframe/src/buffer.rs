@@ -25,6 +25,12 @@ impl DataFrame {
         Shape { rows: self.rows, cols: self.columns.len() }
     }
 
+    pub fn hint_rows(&mut self, rows: usize) {
+        for col in &mut self.columns {
+            col.hint_rows(rows);
+        }
+    }
+
     pub fn hint_complete(&mut self) {
         for col in &mut self.columns {
             col.hint_complete();
@@ -180,6 +186,12 @@ impl<D: ColumnData> ColumnInternal for GenericColumn<D> {
 }
 
 impl<D: ColumnData> ColumnMutInternal for GenericColumn<D> {
+    fn hint_rows(&mut self, rows: usize) {
+        if rows > self.items.len() {
+            self.items.reserve(rows - self.items.len());
+        }
+    }
+
     fn hint_complete(&mut self) {
         self.items.shrink_to_fit();
     }
@@ -217,6 +229,7 @@ impl ColumnInternal for ColumnVariants {
 }
 
 impl ColumnMutInternal for ColumnVariants {
+    fn hint_rows(&mut self, rows: usize) { self.deref_mut().hint_rows(rows) }
     fn hint_complete(&mut self) { self.deref_mut().hint_complete() }
     fn push_data(&mut self, item: &Data) { self.deref_mut().push_data(item) }
 }
