@@ -75,11 +75,10 @@ impl Step {
                 let shape = df.shape();
 
                 for col_idx in 0..shape.cols {
-                    let mut col = df.col_mut(col_idx);
                     let mut prev_value = Data::Null;
                     if *and_before {
                         for row_idx in 0..shape.rows {
-                            let data = col.get_row_data(row_idx);
+                            let data = df.get_by_index(col_idx, row_idx);
                             if !data.is_null() {
                                 prev_value = unsafe { std::mem::transmute(data) };
                                 break;
@@ -88,9 +87,9 @@ impl Step {
                     }
 
                     for row_idx in 0..shape.rows {
-                        let data = col.get_row_data(row_idx);
+                        let data = df.get_by_index(col_idx, row_idx);
                         if data.is_null() {
-                            col.set_row_data(row_idx, &prev_value);
+                            df.set_by_index(col_idx, row_idx, &prev_value);
                         } else {
                             prev_value = unsafe { std::mem::transmute(data) };
                         }
@@ -102,7 +101,7 @@ impl Step {
                 df
             }
             Step::ColEq(_, col_idx, value) => {
-                let equal_to = df.df.cols()[*col_idx].data_type().parse_str(value);
+                let equal_to = df.df.column_type(*col_idx).parse_str(value);
                 let rows = df.shape().rows as f32;
 
                 progress.set(0.0);
@@ -118,7 +117,7 @@ impl Step {
                 df
             }
             Step::Within(_, col_idx, has_lower_bound, lower_bound, has_upper_bound, upper_bound) => {
-                let dtype = df.df.cols()[*col_idx].data_type();
+                let dtype = df.df.column_type(*col_idx);
                 let rows = df.shape().rows as f32;
 
                 let bounds = (

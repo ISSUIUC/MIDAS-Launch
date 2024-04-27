@@ -273,7 +273,6 @@ impl eframe::App for App {
                         let data = &data_shared.shown_data;
 
                         if let (Some(x_idx), Some(y_idx)) = (self.plot_tab.x_idx, self.plot_tab.y_idx) {
-                            let (x_data, y_data) = (data.col(x_idx), data.col(y_idx));
 
                             let key = (data_shared.version, x_idx, y_idx, self.plot_tab.resolution);
                             if !self.plot_tab.cache.as_ref().is_some_and(|(cached_key, _)| cached_key == &key) {
@@ -282,7 +281,7 @@ impl eframe::App for App {
                                 let modulus = (total_rows / required_rows).max(1);
                                 let mut points: Vec<[f64; 2]> = Vec::with_capacity(required_rows);
                                 points.extend((0..data.shape().rows).step_by(modulus).filter_map(|row_idx| {
-                                    let (x_point, y_point) = (x_data.get_row_data(row_idx), y_data.get_row_data(row_idx));
+                                    let (x_point, y_point) = (data.get_by_index(x_idx, row_idx), data.get_by_index(y_idx, row_idx));
                                     if let (Some(x), Some(y)) = (x_point.as_float(), y_point.as_float()) {
                                         Some([x, y])
                                     } else {
@@ -297,8 +296,8 @@ impl eframe::App for App {
 
                             plot::Plot::new("plot")
                                 .allow_drag(false)
-                                .x_axis_label(x_data.name())
-                                .y_axis_label(y_data.name())
+                                .x_axis_label(data.col_name(x_idx))
+                                .y_axis_label(data.col_name(y_idx))
                                 .show(ui, |plot_ui| {
                                     plot_ui.line(line);
                                 });
