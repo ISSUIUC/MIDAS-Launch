@@ -2,6 +2,7 @@ mod column;
 mod view;
 mod buffer;
 mod data;
+mod new;
 
 pub use view::{DataFrameView, ColumnView, ColumnViewMut};
 pub use buffer::DataFrame;
