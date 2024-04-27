@@ -176,8 +176,10 @@ impl<'a> DeserializerBuilder<'a> {
 
     fn align_to(&mut self, align: u8) {
         let amount = self.offset.next_multiple_of(align as usize) - self.offset;
-        self.items.push((ReadType::Padding(amount as u8), 0));
-        self.offset += amount;
+        if amount != 0 {
+            self.items.push((ReadType::Padding(amount as u8), 0));
+            self.offset += amount;
+        }
     }
 }
 

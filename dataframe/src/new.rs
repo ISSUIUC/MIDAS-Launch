@@ -3,14 +3,8 @@ use std::ops::{Index, Range};
 use string_interner::backend::StringBackend;
 use string_interner::StringInterner;
 use string_interner::symbol::SymbolU32;
-use crate::{Data, data};
+use crate::{Data, data, data::DataType};
 use crate::data::ColumnData;
-
-enum DataType {
-    Integer,
-    Float,
-    Enum
-}
 
 struct ColumnInfo {
     offset: usize,
@@ -19,7 +13,7 @@ struct ColumnInfo {
 }
 
 struct ColumnLayout {
-    size: usize,
+    null_row: Box<[u8]>,
     interner: StringInterner<StringBackend>,
     columns: Vec<ColumnInfo>,
 }
@@ -65,13 +59,13 @@ impl Dataframe {
     pub fn row(&self, index: usize) -> Row<'_> {
         debug_assert!(index < self.rows);
         Row {
-            mem: self.mem.as_ptr().wrapping_byte_add(self.layout.size * index),
+            mem: self.mem.as_ptr().wrapping_byte_add(self.layout.null_row.len() * index),
             layout: &self.layout
         }
     }
 
     pub fn add_null_row(&mut self) {
-        self.mem.extend(iter::repeat(0).take(self.layout.size));
+        self.mem.extend(&self.layout.null_row);
         self.rows += 1;
     }
 }
