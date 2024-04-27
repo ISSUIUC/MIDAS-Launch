@@ -84,7 +84,9 @@ impl DataFrame {
             let mut data_types = Vec::new();
 
             offset += file.read_line(&mut row_buf)?;
-            for (col_name, item) in header.trim_end_matches('\n').split(',').zip(row_buf.trim_end_matches('\n').split(',')) {
+            for (col_name, item) in header.trim().split(',').zip(row_buf.trim().split(',')) {
+                let item = item.trim();
+                let col_name = col_name.trim();
                 // if let Ok(as_integer) = item.parse::<i64>() {
                 //     df.add_null_col(col_name, DataType::Integer);
                 //     row_data.push(Data::Integer(as_integer));
@@ -112,6 +114,7 @@ impl DataFrame {
                 }
                 offset += amount;
                 for (dtype, item) in data_types.iter().zip(row_buf.trim_end_matches('\n').split(',')) {
+                    let item = item.trim();
                     row_data.push(dtype.parse_str(item));
                 }
                 if row_data.len() != df.cols().len() {
