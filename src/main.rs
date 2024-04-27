@@ -13,6 +13,7 @@ use std::time::Duration;
 use egui::{Align, Context, FontFamily, Layout, panel::Side, RichText, Visuals, Widget};
 use egui_plot as plot;
 use eframe::{Frame, Storage};
+// use egui_extras::image;
 
 use dataframe::{Column, DataFrameView};
 
@@ -375,11 +376,19 @@ impl<T> ProgressTask<T> where T: Send + 'static {
 
 
 fn main() -> eframe::Result<()> {
-    // let mut viewport = egui::ViewportBuilder::default();
+    // let v = egui::include_image!("../iss-logo.png");
+    let icon_img = image::load_from_memory_with_format(include_bytes!("../iss-logo.png"), image::ImageFormat::Png).unwrap().into_rgba8();
+
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_icon(egui::IconData {
+            width: icon_img.width(),
+            height: icon_img.height(),
+            rgba: icon_img.into_vec()
+        });
     let options = eframe::NativeOptions {
         centered: true,
         // persist_window: true,
-        // viewport,
+        viewport,
         ..Default::default()
     };
     eframe::run_native("MIDAS Launch", options, Box::new(|cc| Box::new(App::new(cc))))

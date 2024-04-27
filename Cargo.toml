@@ -17,5 +17,6 @@ egui = { version = "0.27.2", features = ["persistence"] }
 egui_extras = { version = "0.27.2"}
 egui_plot = { version = "0.27.2" }
 eframe = { version = "0.27.2", features = ["persistence"] }
+image = { version = "0.25.1", features = ["png"] }
 rfd = "0.14.1"
 futures-lite = { version = "2.3.0" }
