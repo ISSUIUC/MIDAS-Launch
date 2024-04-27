@@ -242,7 +242,7 @@ impl ImportLaunchTab {
                             let mut file = BufReader::new(File::open(source_path)?);
                             let size: u64 = file.get_ref().metadata().map_or(0, |m| m.len());
 
-                            format.read_file(&mut file, |offset| {
+                            format.read_file(&mut file, Some(size), |offset| {
                                 progress.set(offset as f32 / size as f32);
                             })
                         }));
