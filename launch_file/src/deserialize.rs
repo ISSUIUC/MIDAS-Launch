@@ -68,25 +68,25 @@ impl Deserializer {
             let offset = *offset;
             match ty {
                 ReadType::Bool => {
-                    row[offset] = Data::Integer((file.read_u8()? != 0) as i64);
+                    row[offset] = Data::Integer((file.read_u8()? != 0) as i32);
                 }
                 ReadType::I8 => {
-                    row[offset] = Data::Integer(file.read_i8()? as i64);
+                    row[offset] = Data::Integer(file.read_i8()? as i32);
                 }
                 ReadType::I32 => {
-                    row[offset] = Data::Integer(file.read_i32::<LittleEndian>()? as i64);
+                    row[offset] = Data::Integer(file.read_i32::<LittleEndian>()?);
                 }
                 ReadType::U8 => {
-                    row[offset] = Data::Integer(file.read_u8()? as i64);
+                    row[offset] = Data::Integer(file.read_u8()? as i32);
                 }
                 ReadType::U32 => {
-                    row[offset] = Data::Integer(file.read_u32::<LittleEndian>()? as i64);
+                    row[offset] = Data::Integer(file.read_u32::<LittleEndian>()? as i32);
                 }
                 ReadType::F32 => {
-                    row[offset] = Data::Float(file.read_f32::<LittleEndian>()? as f64);
+                    row[offset] = Data::Float(file.read_f32::<LittleEndian>()?);
                 }
                 ReadType::F64 => {
-                    row[offset] = Data::Float(file.read_f64::<LittleEndian>()?);
+                    row[offset] = Data::Float(file.read_f64::<LittleEndian>()? as f32);
                 }
                 ReadType::Discriminant(idx) => {
                     let disc = file.read_u32::<LittleEndian>()?;

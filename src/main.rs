@@ -285,7 +285,7 @@ impl eframe::App for App {
                                 points.extend((0..data.shape().rows).step_by(modulus).filter_map(|row_idx| {
                                     let (x_point, y_point) = (x_data.get_row_data(row_idx), y_data.get_row_data(row_idx));
                                     if let (Some(x), Some(y)) = (x_point.as_float(), y_point.as_float()) {
-                                        Some([x, y])
+                                        Some([x as f64, y as f64])
                                     } else {
                                         None
                                     }

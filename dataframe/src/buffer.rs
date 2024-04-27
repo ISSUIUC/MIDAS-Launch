@@ -90,7 +90,7 @@ impl DataFrame {
                 //     row_data.push(Data::Integer(as_integer));
                 //     data_types.push(DataType::Integer);
                 // } else
-                if let Ok(as_float) = item.parse::<f64>() {
+                if let Ok(as_float) = item.parse::<f32>() {
                     df.add_null_col(col_name, DataType::Float);
                     row_data.push(Data::Float(as_float));
                     data_types.push(DataType::Float);

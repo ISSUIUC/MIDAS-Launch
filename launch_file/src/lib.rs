@@ -131,7 +131,7 @@ impl LogFormat {
                     .ok_or_else(|| io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 8)))?;
 
                 row[0] = Data::Str(name);
-                row[1] = Data::Integer(timestamp_ms as i64);
+                row[1] = Data::Integer(timestamp_ms as i32);
 
                 fast_format.parse(file, &mut row)?;
                 offset += fast_format.size as u64;

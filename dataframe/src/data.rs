@@ -37,25 +37,25 @@ pub trait ColumnData: Copy + Eq + 'static {
 pub enum Data<'a> {
     #[default]
     Null,
-    Integer(i64),
+    Integer(i32),
     Str(&'a str),
-    Float(f64),
+    Float(f32),
 }
 
 impl<'a> Data<'a> {
-    pub fn as_integer(&self) -> Option<i64> {
+    pub fn as_integer(&self) -> Option<i32> {
         match *self {
             Data::Integer(num) => Some(num),
-            Data::Str(s) => s.parse::<i64>().ok(),
-            Data::Float(num) => Some(num as i64),
+            Data::Str(s) => s.parse::<i32>().ok(),
+            Data::Float(num) => Some(num as i32),
             Data::Null => None
         }
     }
 
-    pub fn as_float(&self) -> Option<f64> {
+    pub fn as_float(&self) -> Option<f32> {
         match *self {
-            Data::Integer(num) => Some(num as f64),
-            Data::Str(s) => s.parse::<f64>().ok(),
+            Data::Integer(num) => Some(num as f32),
+            Data::Str(s) => s.parse::<f32>().ok(),
             Data::Float(num) => Some(num),
             Data::Null => None
         }
@@ -156,22 +156,22 @@ pub enum DataType {
 impl DataType {
     pub fn parse_str<'a>(&self, s: &'a str) -> Data<'a> {
         match self {
-            DataType::Integer => s.parse::<i64>().ok().map_or(Data::Null, |num| Data::Integer(num)),
-            DataType::Float => s.parse::<f64>().ok().map_or(Data::Null, |num| Data::Float(num)),
+            DataType::Integer => s.parse::<i32>().ok().map_or(Data::Null, |num| Data::Integer(num)),
+            DataType::Float => s.parse::<f32>().ok().map_or(Data::Null, |num| Data::Float(num)),
             DataType::Enum => Data::Str(s)
         }
     }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct Integer(pub i64);
+pub struct Integer(pub i32);
 
 impl ColumnData for Integer {
     const TYPE: DataType = DataType::Integer;
     type Context = ();
 
     fn null() -> Self {
-        Integer(i64::MIN)
+        Integer(i32::MIN)
     }
 
     fn to_data(&self, _ctx: &Self::Context) -> Data {
@@ -184,7 +184,7 @@ impl ColumnData for Integer {
 
     fn from_data(data: &Data, _ctx: &mut Self::Context) -> Option<Self> {
         if let &Data::Integer(num) = data {
-            if num == i64::MIN {
+            if num == i32::MIN {
                 None
             } else {
                 Some(Integer(num))
@@ -202,14 +202,14 @@ impl ColumnData for Integer {
 }
 
 #[derive(Copy, Clone)]
-pub struct Float(pub f64);
+pub struct Float(pub f32);
 
 impl ColumnData for Float {
     const TYPE: DataType = DataType::Float;
     type Context = ();
 
     fn null() -> Self {
-        Float(f64::MIN_POSITIVE)
+        Float(f32::MIN_POSITIVE)
     }
 
     fn to_data(&self, _ctx: &Self::Context) -> Data {
@@ -222,13 +222,13 @@ impl ColumnData for Float {
 
     fn from_data(data: &Data, _ctx: &mut Self::Context) -> Option<Self> {
         if let &Data::Float(num) = data {
-            if num == f64::MIN_POSITIVE {
+            if num == f32::MIN_POSITIVE {
                 None
             } else {
                 Some(Float(num))
             }
         } else if let &Data::Integer(num) = data {
-            Some(Float(num as f64))
+            Some(Float(num as f32))
         } else if let Data::Null = data {
             Some(Float::null())
         } else {
