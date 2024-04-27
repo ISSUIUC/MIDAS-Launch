@@ -3,7 +3,7 @@ use std::ops::Bound;
 use egui::Ui;
 use eframe::Storage;
 
-use dataframe::{Column, ColumnMut, Data, DataFrameView};
+use dataframe::{Data, DataFrameView};
 
 use crate::DataShared;
 use crate::{ProgressTask, Progress};

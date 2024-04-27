@@ -3,62 +3,6 @@ use std::sync::Arc;
 
 use crate::data::{Data, DataType};
 use crate::{DataFrame, Shape};
-use crate::column::{Column, ColumnInternal, ColumnMut, ColumnMutInternal};
-
-pub struct ColumnView<'a, C>(&'a Vec<usize>, &'a C);
-pub struct ColumnViewMut<'a, C>(&'a mut Vec<usize>, &'a mut C);
-
-impl<'a, C: Column> Column for ColumnView<'a, C> {
-    fn name(&self) -> &str { self.1.name() }
-    fn len(&self) -> usize { self.0.len() }
-    fn data_type(&self) -> DataType { self.1.data_type() }
-
-    fn get_row_data(&self, index: usize) -> Data {
-        self.1.get_row_data(self.0[index])
-    }
-
-    fn compare(&self, a: usize, b: usize) -> Ordering {
-        self.1.compare(self.0[a], self.0[b])
-    }
-}
-
-impl<'a, C: ColumnInternal> ColumnInternal for ColumnView<'a, C> {
-    fn underlying_rows(&self) -> usize { self.1.underlying_rows() }
-}
-
-impl<'a, C: Column> Column for ColumnViewMut<'a, C> {
-    fn name(&self) -> &str { self.1.name() }
-    fn len(&self) -> usize { self.0.len() }
-    fn data_type(&self) -> DataType { self.1.data_type() }
-
-    fn get_row_data(&self, index: usize) -> Data {
-        self.1.get_row_data(self.0[index])
-    }
-
-    fn compare(&self, a: usize, b: usize) -> Ordering {
-        self.1.compare(self.0[a], self.0[b])
-    }
-}
-
-impl<'a, C: ColumnMut> ColumnMut for ColumnViewMut<'a, C> {
-    fn set_row_data(&mut self, index: usize, data: &Data) {
-        self.1.set_row_data(self.0[index], data)
-    }
-}
-
-impl<'a, C: ColumnInternal> ColumnInternal for ColumnViewMut<'a, C> {
-    fn underlying_rows(&self) -> usize { self.1.underlying_rows() }
-}
-
-impl<'a, C: ColumnMutInternal> ColumnMutInternal for ColumnViewMut<'a, C> {
-    fn hint_complete(&mut self) { self.1.hint_complete() }
-
-    fn push_data(&mut self, item: &Data) {
-        self.0.push(self.1.underlying_rows());
-        self.1.push_data(item);
-    }
-}
-
 
 
 #[derive(Clone)]

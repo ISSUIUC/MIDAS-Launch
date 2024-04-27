@@ -14,7 +14,7 @@ use egui::{Align, Context, FontFamily, Layout, panel::Side, RichText, Visuals, W
 use egui_plot as plot;
 use eframe::{Frame, Storage};
 
-use dataframe::{Column, DataFrameView};
+use dataframe::{DataFrameView};
 
 use crate::import::ImportTab;
 use crate::process::ProcessTab;
