@@ -211,17 +211,39 @@ pub(crate) enum ColumnVariants {
 
 impl Column for ColumnVariants {
     fn name(&self) -> &str { self.deref().name() }
-    fn len(&self) -> usize { self.deref().len() }
+    fn len(&self) -> usize {
+        match self {
+            ColumnVariants::Integer(col) => col.len(),
+            ColumnVariants::Enum(col) => col.len(),
+            ColumnVariants::Float(col) => col.len()
+        }
+    }
     fn data_type(&self) -> DataType { self.deref().data_type() }
-    fn get_row_data(&self, index: usize) -> Data { self.deref().get_row_data(index) }
+    fn get_row_data(&self, index: usize) -> Data {
+        match self {
+            ColumnVariants::Integer(col) => col.get_row_data(index),
+            ColumnVariants::Enum(col) => col.get_row_data(index),
+            ColumnVariants::Float(col) => col.get_row_data(index)
+        }
+    }
 
     fn compare(&self, a: usize, b: usize) -> Ordering {
-        self.deref().compare(a, b)
+        match self {
+            ColumnVariants::Integer(col) => col.compare(a, b),
+            ColumnVariants::Enum(col) => col.compare(a, b),
+            ColumnVariants::Float(col) => col.compare(a, b)
+        }
     }
 }
 
 impl ColumnMut for ColumnVariants {
-    fn set_row_data(&mut self, index: usize, data: &Data) { self.deref_mut().set_row_data(index, data) }
+    fn set_row_data(&mut self, index: usize, data: &Data) {
+        match self {
+            ColumnVariants::Integer(col) => col.set_row_data(index, data),
+            ColumnVariants::Enum(col) => col.set_row_data(index, data),
+            ColumnVariants::Float(col) => col.set_row_data(index, data)
+        }
+    }
 }
 
 impl ColumnInternal for ColumnVariants {
@@ -231,7 +253,13 @@ impl ColumnInternal for ColumnVariants {
 impl ColumnMutInternal for ColumnVariants {
     fn hint_rows(&mut self, rows: usize) { self.deref_mut().hint_rows(rows) }
     fn hint_complete(&mut self) { self.deref_mut().hint_complete() }
-    fn push_data(&mut self, item: &Data) { self.deref_mut().push_data(item) }
+    fn push_data(&mut self, item: &Data) {
+        match self {
+            ColumnVariants::Integer(col) => col.push_data(item),
+            ColumnVariants::Enum(col) => col.push_data(item),
+            ColumnVariants::Float(col) => col.push_data(item),
+        }
+    }
 }
 
 impl Deref for ColumnVariants {
