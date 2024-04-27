@@ -20,7 +20,9 @@ The workflow for using this software can be divided into 4 steps:
 4. (Possibly) Reexport the data to a CSV.
 
 ### Loading data from CSVs
-   
+
+Sample Flight data is available [here](https://uofi.box.com/s/4tiz5087w0k0o5c8q6ztsot6nda5cbi3).
+
 Loading data from CSVs is fairly simple. Select the 'Import' tab, then select the source type
 '.csv File'. Now either paste in the absolute path to the CSV file you wish to load, or click
 'Choose File' and select the file you wish to load in.
