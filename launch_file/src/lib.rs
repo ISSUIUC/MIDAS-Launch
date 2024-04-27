@@ -115,9 +115,9 @@ impl LogFormat {
         let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
 
         let result: io::Result<()> = try_catch!({
-            let mut row = vec![Data::Null; num_cols];
+            // let mut row = vec![Data::Null; num_cols];
             loop {
-                row.fill(Data::Null);
+                // row.fill(Data::Null);
 
                 let determinant = file.read_u32::<LittleEndian>()?; offset += 4;
                 let timestamp_ms = file.read_u32::<LittleEndian>()?; offset += 4;
@@ -125,13 +125,25 @@ impl LogFormat {
                 let (name, fast_format) = variants.get(&determinant)
                     .ok_or_else(|| io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 8)))?;
 
-                row[0] = Data::Str(name);
-                row[1] = Data::Integer(timestamp_ms as i64);
+                // row[0] = Data::Str(name);
+                // row[1] = Data::Integer(timestamp_ms as i64);
 
-                fast_format.parse(file, &mut row)?;
+                dataframe.add_blank_row();
+                unsafe {
+                    dataframe.append_item_unchecked(0, Data::Str(name));
+                    dataframe.append_item_unchecked(1, Data::Integer(timestamp_ms as i64));
+                }
+
+                fast_format.parse_direct(file, |col,data|{
+                    unsafe {
+                        dataframe.append_item_unchecked(col, data);
+                    }
+                });
+
+                // fast_format.parse(file, &mut row)?;
                 offset += fast_format.size as u64;
 
-                dataframe.add_row(&row);
+                // dataframe.add_row(&row);
                 on_row_callback(offset);
             }
         });

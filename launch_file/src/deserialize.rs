@@ -62,6 +62,45 @@ pub struct Deserializer {
 }
 
 impl Deserializer {
+    pub fn parse_direct(&self, file: &mut impl Read, mut emit: impl FnMut(usize, Data)) -> io::Result<()> {
+        let mut padding_buf = [0; 256];
+        for (ty, col) in &self.items {
+            let col = *col;
+            match ty {
+                ReadType::Bool => {
+                    emit(col, Data::Integer((file.read_u8()? != 0) as i64))
+                }
+                ReadType::I8 => {
+                    emit(col, Data::Integer(file.read_i8()? as i64))
+                }
+                ReadType::I32 => {
+                    emit(col, Data::Integer(file.read_i32::<LittleEndian>()? as i64))
+                }
+                ReadType::U8 => {
+                    emit(col, Data::Integer(file.read_u8()? as i64))
+                }
+                ReadType::U32 => {
+                    emit(col, Data::Integer(file.read_u32::<LittleEndian>()? as i64))
+                }
+                ReadType::F32 => {
+                    emit(col, Data::Float(file.read_f32::<LittleEndian>()? as f64))
+                }
+                ReadType::F64 => {
+                    emit(col, Data::Float(file.read_f64::<LittleEndian>()?))
+                }
+                ReadType::Discriminant(idx) => {
+                    let disc = file.read_u32::<LittleEndian>()?;
+                    let name = self.enums[*idx as usize].get(&disc).map_or("<unknown>", |name| name);
+                    emit(col, Data::Str(name))
+                }
+                ReadType::Padding(amount) => {
+                    file.read_exact(&mut padding_buf[..*amount as usize])?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn parse<'a, 'b>(&'a self, file: &mut impl Read, row: &mut [Data<'b>]) -> io::Result<()> where 'a: 'b {
         let mut padding_buf = [0; 256];
         for (ty, offset) in &self.items {

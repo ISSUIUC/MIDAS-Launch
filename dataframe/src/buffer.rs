@@ -50,6 +50,15 @@ impl DataFrame {
         new_idx
     }
 
+    pub fn add_blank_row(&mut self) {
+        self.items.push(smallvec![]);
+    }
+
+    pub unsafe fn append_item_unchecked(&mut self, col: usize, data: Data) {
+        let dataitem = self.to_data_item(&data, col);
+        self.items.last_mut().unwrap().push(dataitem);
+    }
+
     pub fn add_row(&mut self, row: &[Data]) {
         let row = row.iter().enumerate()
             .filter(|(i,x)|!x.is_null())
