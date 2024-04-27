@@ -3,10 +3,10 @@
 ## Installation
 
 1. Install Rust v1.77.1 or above. 
-   * If you don't have Rust installed, follow the directions here.
+   * If you don't have Rust installed, follow the directions [here](https://www.rust-lang.org/tools/install).
    * If you already have Rust installed, make sure you're on at least 1.77.1 by running `rustup upgrade`.
 2. Install the MIDAS Data Viewer locally using `cargo install --git https://github.com/redindelible/MIDAS-Launch`. This builds a local copy of the resulting executable.
-3. Run the Data Viewer executable using the midas-launch command.
+3. Run the Data Viewer executable by typing `midas-launch` into your command line.
 
 ## Usage
 The workflow for using this software can be divided into 4 steps:
@@ -59,3 +59,25 @@ was created by the same format, click the 'Inspect Source' button and verify tha
 
 Now, you can click the 'Load Data' button. In a few seconds, this will have imported all the data
 from the launch file.
+
+### Processing
+
+This software provides 4 different types of filters. You can add any number of filters,
+and you may add each filter any number of times in any order. You can click the '-' button to
+remove the associated row, '^' to swap it with the one above, or 'v' to swap it with the one below.
+
+> [!NOTE]
+> Each time you click 'Apply', the filters will all be run again from a 
+> clean, unprocessed copy of the data.
+
+* Fill: Fills in the empty cells with the contents of either the previous (for downwards) 
+or next (for upwards) non-empty cell. If 'Backfill' is selected, then the empty cells at the start
+and ends of the table are also filled with the closest non-empty cell.
+* Select: Only retain the rows of the table where the value of the chosen column of that row is equal
+to the provided value.
+* Within: Only retain the rows of the table where the value of the chosen column match the conditions: If 'Lower' is selected,
+then only rows with a value above the provided bound are retained. If 'Upper' is selected, then only rows
+with a value below the provided are retained. Both can be selected at the same time.
+* Sort: Sort the rows of the table by the value of the chosen column, in either ascending or descending order.
+
+### Plotting
