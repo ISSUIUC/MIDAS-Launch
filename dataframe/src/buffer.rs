@@ -11,7 +11,8 @@ use super::data::{ColumnData, Data, DataType, Enum, Float, Integer};
 enum DataUnion {
     Float(f64),
     Integer(i64),
-    StrIdx(u64)
+    StrIdx(u64),
+    Null
 }
 
 #[derive(Clone)]
@@ -84,7 +85,7 @@ impl DataFrame {
             Data::Integer(i) => DataUnion::Integer(*i),
             Data::Str(s) => DataUnion::StrIdx(self.get_or_add_enum_idx(s)),
             Data::Float(f) => DataUnion::Float(*f),
-            Data::Null => unreachable!()
+            Data::Null => DataUnion::Null,
         };
 
         DataItem {
@@ -98,6 +99,7 @@ impl DataFrame {
             DataUnion::Float(f) => Data::Float(f),
             DataUnion::Integer(i) => Data::Integer(i),
             DataUnion::StrIdx(s) => Data::Str(self.get_enum_str(s)),
+            DataUnion::Null => Data::Null,
         }
     }
 
