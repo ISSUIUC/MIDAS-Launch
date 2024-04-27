@@ -8,6 +8,10 @@
 2. Install the MIDAS Data Viewer locally using `cargo install --git https://github.com/redindelible/MIDAS-Launch`. This builds a local copy of the resulting executable.
 3. Run the Data Viewer executable by typing `midas-launch` into your command line.
 
+### Updating
+
+If a new version of this software is available, you can update it by re-running step 3 above.
+
 ## Usage
 The workflow for using this software can be divided into 4 steps:
 1. Load data from either a raw launch file or from a CSV.
@@ -81,3 +85,17 @@ with a value below the provided are retained. Both can be selected at the same t
 * Sort: Sort the rows of the table by the value of the chosen column, in either ascending or descending order.
 
 ### Plotting
+
+To plot the data, simply switch to the 'Plot' tab and select columns to plot on the X and Y axes.
+Points from the data set are sampled to improve performance. The 'Resolution' slider can be moved to
+change the balance between fidelity and performance, with lower resolutions improving performance. 
+
+> [!NOTE]
+> Applying a Sort and a Fill before plotting improves results.
+
+### Exporting
+
+Processed data can be re-exported in CSV form. Switch to the 'Export' tab, choose a file to export to using 
+the 'Choose File' button, and then press 'Export'. If the chosen file already exists, this will replace the 
+contents of the file. If you want to append this data to the pre-existing data in the chosen file instead,
+check the 'Append' box before exporting. 

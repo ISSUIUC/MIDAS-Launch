@@ -12,7 +12,7 @@ use crate::file_picker::FilePicker;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum ExportFormats {
-    Json,
+    // Json,
     Csv
 }
 
@@ -34,7 +34,7 @@ struct CsvExport {
 
 pub struct ExportTab {
     export: ExportFormats,
-    json: JsonExport,
+    // json: JsonExport,
     csv: CsvExport
 }
 
@@ -42,13 +42,13 @@ impl ExportTab {
     pub fn new(_cc: &eframe::CreationContext) -> ExportTab {
         ExportTab {
             export: ExportFormats::Csv,
-            json: JsonExport {
-                path: String::new(),
-                omit_null: true,
-
-                export: None,
-                msg: None
-            },
+            // json: JsonExport {
+            //     path: String::new(),
+            //     omit_null: true,
+            //
+            //     export: None,
+            //     msg: None
+            // },
             csv: CsvExport {
                 path: String::new(),
                 append_mode: false,
@@ -64,16 +64,16 @@ impl ExportTab {
     pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
         ui.add_space(3.0);
 
-        ui.columns(2, |cols| {
-            cols[0].vertical_centered_justified(|ui| {
-                ui.selectable_value(&mut self.export, ExportFormats::Csv, "CSV")
-            });
-            cols[1].vertical_centered_justified(|ui| {
-                ui.selectable_value(&mut self.export, ExportFormats::Json, "JSON")
-            });
-        });
-
-        ui.add_space(3.0);
+        // ui.columns(2, |cols| {
+        //     cols[0].vertical_centered_justified(|ui| {
+        //         ui.selectable_value(&mut self.export, ExportFormats::Csv, "CSV")
+        //     });
+        //     cols[1].vertical_centered_justified(|ui| {
+        //         ui.selectable_value(&mut self.export, ExportFormats::Json, "JSON")
+        //     });
+        // });
+        //
+        // ui.add_space(3.0);
 
         if let Some(csv_export) = &self.csv.export {
             if csv_export.is_finished() {
@@ -87,17 +87,17 @@ impl ExportTab {
             }
         }
 
-        if let Some(json_export) = &self.json.export {
-            if json_export.is_finished() {
-                let result = self.json.export.take().unwrap().handle.join().unwrap();
-                match result {
-                    Ok(()) => (),
-                    Err(e) => {
-                        self.json.msg = Some(e.to_string());
-                    }
-                }
-            }
-        }
+        // if let Some(json_export) = &self.json.export {
+        //     if json_export.is_finished() {
+        //         let result = self.json.export.take().unwrap().handle.join().unwrap();
+        //         match result {
+        //             Ok(()) => (),
+        //             Err(e) => {
+        //                 self.json.msg = Some(e.to_string());
+        //             }
+        //         }
+        //     }
+        // }
 
         match self.export {
             ExportFormats::Csv => {
@@ -173,68 +173,31 @@ impl ExportTab {
                 });
             }
 
-            ExportFormats::Json => {
-                ui.horizontal(|ui| {
-                    ui.label("Path");
-                    ui.add(FilePicker::new("json-picker", &mut self.json.path)
-                        .add_filter("JSON", &["json"])
-                        .set_is_save(true)
-                        .dialog_title("Save"));
-                });
-
-                ui.horizontal(|ui| {
-                    if let Some(export) = &self.json.export {
-                            ui.add_enabled(false, egui::Button::new("Export"));
-
-                            ui.add(egui::ProgressBar::new(export.progress()));
-                    } else {
-                        // if ui.button("Export").clicked() {
-                        //     let data = shared.as_ref().unwrap().shown_data.clone().unwrap_or_else(|| shared.as_ref().unwrap().complete_data.clone());
-                        //     let path = PathBuf::from(self.json.path.clone());
-                        //
-                        //     self.json.export = Some(ProgressTask::new(ui.ctx(), |progress| {
-                        //         let mut file = BufWriter::new(File::create(&path)?);
-                        //
-                        //         let mut col_iterator = data.col_names();
-                        //         if let Some(name) = col_iterator.next() {
-                        //             write!(&mut file, "{}", name)?;
-                        //
-                        //             while let Some(name) = col_iterator.next() {
-                        //                 write!(&mut file, ",{}", name)?;
-                        //             }
-                        //
-                        //             file.write(&[b'\n'])?;
-                        //         }
-                        //
-                        //         let total_rows = data.shape().rows;
-                        //         for idx in 0..total_rows {
-                        //             let mut row_iterator = data.row_iter(idx);
-                        //             if let Some(data) = row_iterator.next() {
-                        //                 write!(&mut file, "{}", data)?;
-                        //
-                        //                 while let Some(data) = row_iterator.next() {
-                        //                     write!(&mut file, ",{}", data)?;
-                        //                 }
-                        //             }
-                        //             file.write(&[b'\n'])?;
-                        //
-                        //             if idx % 3000 == 0 {
-                        //                 progress.set(idx as f32 / total_rows as f32);
-                        //             }
-                        //         }
-                        //
-                        //         file.flush()?;
-                        //
-                        //         Ok(())
-                        //     }));
-                        // }
-
-                        if let Some(msg) = &self.json.msg {
-                            ui.colored_label(Color32::RED, msg);
-                        }
-                    }
-                });
-            }
+            // ExportFormats::Json => {
+            //     ui.horizontal(|ui| {
+            //         ui.label("Path");
+            //         ui.add(FilePicker::new("json-picker", &mut self.json.path)
+            //             .add_filter("JSON", &["json"])
+            //             .set_is_save(true)
+            //             .dialog_title("Save"));
+            //     });
+            //
+            //     ui.horizontal(|ui| {
+            //         if let Some(export) = &self.json.export {
+            //                 ui.add_enabled(false, egui::Button::new("Export"));
+            //
+            //                 ui.add(egui::ProgressBar::new(export.progress()));
+            //         } else {
+            //             // if ui.button("Export").clicked() {
+            //
+            //             // }
+            //
+            //             if let Some(msg) = &self.json.msg {
+            //                 ui.colored_label(Color32::RED, msg);
+            //             }
+            //         }
+            //     });
+            // }
         }
     }
 }
