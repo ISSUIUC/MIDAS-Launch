@@ -5,7 +5,7 @@
 1. Install Rust v1.77.1 or above. 
    * If you don't have Rust installed, follow the directions [here](https://www.rust-lang.org/tools/install).
    * If you already have Rust installed, make sure you're on at least 1.77.1 by running `rustup upgrade`.
-2. Install the MIDAS Data Viewer locally using `cargo install --git https://github.com/redindelible/MIDAS-Launch`. This builds a local copy of the resulting executable.
+2. Install the MIDAS Data Viewer locally using `cargo install --git https://github.com/ISSUIUC/MIDAS-Launch`. This builds a local copy of the resulting executable.
 3. Run the Data Viewer executable by typing `midas-launch` into your command line.
 
 ### Updating
