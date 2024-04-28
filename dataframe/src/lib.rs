@@ -3,8 +3,8 @@ mod buffer;
 mod data;
 
 pub use view::{DataFrameView};
-pub use buffer::DataFrame;
-pub use data::{Data, DataType};
+pub use buffer::{DataFrame, DataFrameBuilder};
+pub use data::{Data, DataType, DataTypeNew};
 
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

@@ -190,8 +190,12 @@ impl ImportTab {
                         let source_path = self.source_path.clone();
 
                         self.parsing = Some(ProgressTask::new(ui.ctx(), move |progress| {
-                            let mut file = BufReader::new(File::open(source_path)?);
-                            let size: u64 = file.get_ref().metadata().map_or(0, |m| m.len());
+                            let mut v = vec![];
+                            File::open(source_path)?.read_to_end(&mut v)?;
+                            let size = v.len();;
+                            let mut file = std::io::Cursor::new(v);
+                            // let mut file = BufReader::new(File::open(source_path)?);
+                            // let size: u64 = file.get_ref().metadata().map_or(0, |m| m.len());
 
                             format.read_file(&mut file, |offset| {
                                 progress.set(offset as f32 / size as f32);

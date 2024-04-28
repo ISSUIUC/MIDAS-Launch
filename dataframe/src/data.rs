@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::ops::{RangeBounds, Bound};
+use byteorder::{ReadBytesExt, LittleEndian};
 
 pub trait ColumnData: Copy + Eq + 'static {
     const TYPE: DataType;
@@ -151,6 +152,60 @@ pub enum DataType {
     Integer,
     Float,
     Enum
+}
+
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub enum DataTypeNew {
+    Bool,
+    I8,
+    I32,
+    U8,
+    U32,
+    F32,
+    F64,
+    Enum,
+}
+
+impl DataTypeNew {
+    pub fn width(&self) -> usize {
+        match self {
+            DataTypeNew::Bool => 1,
+            DataTypeNew::I8 => 1,
+            DataTypeNew::I32 => 4,
+            DataTypeNew::U8 => 1,
+            DataTypeNew::U32 => 4,
+            DataTypeNew::F32 => 4,
+            DataTypeNew::F64 => 8,
+            DataTypeNew::Enum => 4,
+        }
+    }
+
+    pub fn data_type(&self) -> DataType {
+        match self {
+            DataTypeNew::Bool => DataType::Integer,
+            DataTypeNew::I8 => DataType::Integer,
+            DataTypeNew::I32 => DataType::Integer,
+            DataTypeNew::U8 => DataType::Integer,
+            DataTypeNew::U32 => DataType::Integer,
+            DataTypeNew::F32 => DataType::Float,
+            DataTypeNew::F64 => DataType::Float,
+            DataTypeNew::Enum => DataType::Enum
+        }
+    }
+
+    pub fn read(&self, mut data: &[u8]) -> Data {
+        match self {
+            DataTypeNew::Bool => Data::Integer(data.read_u8().unwrap() as i64),
+            DataTypeNew::I8 => Data::Integer(data.read_i8().unwrap() as i64),
+            DataTypeNew::I32 => Data::Integer(data.read_i32::<LittleEndian>().unwrap() as i64),
+            DataTypeNew::U8 => Data::Integer(data.read_u8().unwrap() as i64),
+            DataTypeNew::U32 => Data::Integer(data.read_u32::<LittleEndian>().unwrap() as i64),
+            DataTypeNew::F32 => Data::Float(data.read_f32::<LittleEndian>().unwrap() as f64),
+            DataTypeNew::F64 => Data::Float(data.read_f64::<LittleEndian>().unwrap() as f64),
+            DataTypeNew::Enum => Data::Str("_"),
+        }
+    }
 }
 
 impl DataType {

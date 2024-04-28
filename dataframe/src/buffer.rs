@@ -1,11 +1,194 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use smallvec::{SmallVec, smallvec};
+use crate::data::DataTypeNew;
 
 use super::Shape;
 use super::data::{ColumnData, Data, DataType, Enum, Float, Integer};
 
+pub type DataFrame = DataFrameNew;
+// type DataFrame = DataFrameOld;
+
+const ROWS_PER_BLOCK: usize = 1<<20;
+
+#[derive(Clone)]
+enum ColumnDescriptionWithPad {
+    Desc(ColumnDescription),
+    Pad(usize),
+}
+#[derive(Clone)]
+struct ColumnDescription {
+    ty: DataTypeNew,
+    idx: usize,
+    name: String,
+}
+
+#[derive(Clone, Debug)]
+struct ColumnAlignment {
+    ty: DataTypeNew,
+    idx: usize,
+    name: String,
+    offset: usize,
+}
+
+#[derive(Clone, Debug)]
+struct PacketAlignment {
+    offset: usize,
+    width: usize,
+}
+
+pub struct DataFrameBuilder {
+    column_groups: Vec<Vec<ColumnDescriptionWithPad>>,
+    column_count: usize,
+}
+
+impl DataFrameBuilder {
+    pub fn new() -> Self {
+        Self {
+            column_groups: Vec::new(),
+            column_count: 0
+        }
+    }
+
+    pub fn add_col(&mut self, name: impl Into<String>, ty: DataTypeNew, packet_id: usize) -> usize {
+        while self.column_groups.len() <= packet_id {
+            self.column_groups.push(vec![]);
+        }
+
+        let idx = self.column_count;
+
+        self.column_groups[packet_id].push(ColumnDescriptionWithPad::Desc(ColumnDescription{
+            ty,
+            idx,
+            name: name.into(),
+        }));
+
+        self.column_count += 1;
+
+        idx
+    }
+
+    pub fn add_pad(&mut self, amount: usize, packet_id: usize) {
+        while self.column_groups.len() <= packet_id {
+            self.column_groups.push(vec![]);
+        }
+
+        self.column_groups[packet_id].push(ColumnDescriptionWithPad::Pad(amount));
+    }
+
+    pub fn build(&self) -> DataFrameNew {
+        let mut total_offset = 0;
+        let mut aligned_cols = vec![];
+        let mut packets = vec![];
+        for cols in &self.column_groups {
+            let mut local_offset = 0;
+            for c in cols {
+                match c {
+                    ColumnDescriptionWithPad::Desc(c) => {
+                        aligned_cols.push(ColumnAlignment{
+                            ty: c.ty,
+                            idx: c.idx,
+                            name: c.name.clone(),
+                            offset: total_offset + local_offset
+                        });
+                        local_offset += c.ty.width()
+                    },
+                    ColumnDescriptionWithPad::Pad(pad) => {
+                        local_offset += pad
+                    }
+                }
+
+            }
+            packets.push(PacketAlignment{
+                offset: total_offset,
+                width: local_offset
+            });
+            total_offset += local_offset
+        }
+
+        DataFrameNew::new(&packets, &aligned_cols, total_offset)
+    }
+}
+
+#[derive(Clone)]
+pub struct DataFrameNew {
+    backing: Vec<Vec<u8>>,
+    width: usize,
+    rows: usize,
+    columns: Vec<ColumnAlignment>,
+    packets: Vec<PacketAlignment>,
+}
+
+impl DataFrameNew {
+    pub fn new(packets: &[PacketAlignment], columns: &[ColumnAlignment], row_width: usize) -> Self {
+        Self {
+            backing: vec![],
+            width: row_width,
+            rows: 0,
+            columns: columns.to_vec(),
+            packets: packets.to_vec(),
+        }
+    }
+
+    pub fn column_names(&self) -> impl Iterator<Item=&str> {
+        self.columns.iter().map(|c|c.name.as_str())
+    }
+
+    pub fn column_name(&self, col: usize) -> &str {
+        &self.columns[col].name
+    }
+
+    pub fn column_type(&self, col: usize) -> DataType {
+        self.columns[col].ty.data_type()
+    }
+
+    pub fn row_iter(&self, index: usize) -> impl Iterator<Item=Data> {
+        (0..self.columns.len()).map(move |i|self.get_data(index,i))
+    }
+
+    pub fn add_row(&mut self) {
+        if self.rows % ROWS_PER_BLOCK == 0 {
+            let mut block = vec![];
+            block.resize(self.width * ROWS_PER_BLOCK, 0xff);
+            self.backing.push(block);
+        }
+        self.rows += 1;
+    }
+
+    pub fn get_slice_for(&mut self, packet_id: usize) -> &mut [u8] {
+        let p = &self.packets[packet_id];
+
+        let block_idx = (self.rows - 1) / ROWS_PER_BLOCK;
+        let block_offset = ((self.rows - 1) % ROWS_PER_BLOCK) * self.width + p.offset;
+        &mut self.backing[block_idx][block_offset..(block_offset+p.width)]
+    }
+
+    pub fn shape(&self) -> Shape {
+        Shape { rows: self.rows, cols: self.columns.len() }
+    }
+
+    pub fn get_data(&self, row: usize, col: usize) -> Data {
+        let block_idx = row / ROWS_PER_BLOCK;
+        let row_offset = (row % ROWS_PER_BLOCK) * self.width;
+        let col = &self.columns[col];
+        let base_offset = col.offset;
+        let width = col.ty.width();
+
+        let off = row_offset + base_offset;
+        let slice = &self.backing[block_idx][off..(off+width)];
+        if slice.iter().all(|x|*x == 0xff) {
+            Data::Null
+        } else {
+            col.ty.read(slice)
+        }
+    }
+
+    pub fn set_data(&mut self, row: usize, col: usize, data: &Data) {
+        todo!()
+    }
+}
 
 #[derive(Clone)]
 enum DataUnion {
@@ -22,13 +205,13 @@ struct DataItem {
 }
 
 #[derive(Clone)]
-pub struct DataFrame {
+pub struct DataFrameOld {
     columns: Vec<ColumnDesc>,
     items: Vec<SmallVec<[DataItem;5]>>,
     enum_map: Vec<String>
 }
 
-impl DataFrame {
+impl DataFrameOld {
     pub fn new() -> Self {
         Self {
             columns: vec![],

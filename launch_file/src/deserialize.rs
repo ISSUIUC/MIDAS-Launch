@@ -1,5 +1,5 @@
 use std::io::Read;
-use dataframe::{Data, DataFrame, DataType};
+use dataframe::{Data, DataFrameBuilder, DataType, DataTypeNew};
 use std::io;
 use byteorder::{LittleEndian, ReadBytesExt};
 use serde::Deserialize;
@@ -56,12 +56,20 @@ pub enum ReadType {
 }
 
 pub struct Deserializer {
-    items: Vec<(ReadType, usize)>,
+    pub items: Vec<(ReadType, usize)>,
     enums: Vec<HashMap<u32, String>>,
     pub size: usize
 }
 
 impl Deserializer {
+    pub fn null() -> Self {
+        Self {
+            items: vec![],
+            enums: vec![],
+            size: 0,
+        }
+    }
+
     pub fn parse_direct(&self, file: &mut impl Read, mut emit: impl FnMut(usize, Data)) -> io::Result<()> {
         let mut padding_buf = [0; 256];
         for (ty, col) in &self.items {
@@ -142,17 +150,18 @@ impl Deserializer {
 }
 
 pub struct DeserializerBuilder<'a> {
-    in_table: &'a mut DataFrame,
-
+    in_table: &'a mut DataFrameBuilder,
+    id: usize,
     items: Vec<(ReadType, usize)>,
     offset: usize,
     enums: Vec<HashMap<u32, String>>
 }
 
 impl<'a> DeserializerBuilder<'a> {
-    pub fn new(in_table: &'a mut DataFrame) -> DeserializerBuilder<'a> {
+    pub fn new(in_table: &'a mut DataFrameBuilder, id: usize) -> DeserializerBuilder<'a> {
         DeserializerBuilder {
             in_table,
+            id,
             items: vec![],
             offset: 0,
             enums: vec![]
@@ -164,49 +173,49 @@ impl<'a> DeserializerBuilder<'a> {
     }
 
     fn read_bool(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.in_table.add_col(name, DataTypeNew::Bool, self.id);
         self.items.push((ReadType::Bool, offset));
         self.offset += 1;
     }
 
     fn read_i8(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.in_table.add_col(name, DataTypeNew::I8, self.id);
         self.items.push((ReadType::I8, offset));
         self.offset += 1;
     }
 
     fn read_i32(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.in_table.add_col(name, DataTypeNew::I32, self.id);
         self.items.push((ReadType::I32, offset));
         self.offset += 4;
     }
 
     fn read_u8(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.in_table.add_col(name, DataTypeNew::U8, self.id);
         self.items.push((ReadType::U8, offset));
         self.offset += 1;
     }
 
     fn read_u32(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.in_table.add_col(name, DataTypeNew::U32, self.id);
         self.items.push((ReadType::U32, offset));
         self.offset += 4;
     }
 
     fn read_f32(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Float);
+        let offset = self.in_table.add_col(name, DataTypeNew::F32, self.id);
         self.items.push((ReadType::F32, offset));
         self.offset += 4;
     }
 
     fn read_f64(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Float);
+        let offset = self.in_table.add_col(name, DataTypeNew::F64, self.id);
         self.items.push((ReadType::F64, offset));
         self.offset += 8;
     }
 
     fn read_enum(&mut self, name: impl Into<String>, variants: HashMap<u32, String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Enum);
+        let offset = self.in_table.add_col(name, DataTypeNew::Enum, self.id);
         let idx = self.enums.len() as u8;
         self.enums.push(variants);
         self.items.push((ReadType::Discriminant(idx), offset));
@@ -215,6 +224,7 @@ impl<'a> DeserializerBuilder<'a> {
 
     fn align_to(&mut self, align: u8) {
         let amount = self.offset.next_multiple_of(align as usize) - self.offset;
+        self.in_table.add_pad(amount, self.id);
         self.items.push((ReadType::Padding(amount as u8), 0));
         self.offset += amount;
     }
