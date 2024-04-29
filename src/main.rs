@@ -6,7 +6,9 @@ mod process;
 mod import;
 mod export;
 
+use std::cell::Cell;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -331,19 +333,25 @@ impl eframe::App for App {
 }
 
 #[derive(Clone)]
-struct Progress(Arc<Mutex<(Context, f32, String)>>);
+struct Progress {
+    context: Context,
+    contents: Arc<(AtomicU32, Mutex<String>)>,
+    local_progress: Cell<f32>
+}
 
 impl Progress {
     fn set_text(&self, text: String) {
-        let mut lock = self.0.lock().unwrap();
-        lock.2 = text;
-        lock.0.request_repaint_after(Duration::from_millis(16));
+        let mut lock = self.contents.1.lock().unwrap();
+        *lock = text;
+        self.context.request_repaint_after(Duration::from_millis(16));
     }
 
     fn set(&self, amount: f32) {
-        let mut lock = self.0.lock().unwrap();
-        lock.1 = amount;
-        lock.0.request_repaint_after(Duration::from_millis(16));
+        if (amount * 100.0).floor() > (self.local_progress.get() * 100.0).floor() {
+            self.local_progress.set(amount);
+            self.contents.0.store(amount.to_bits(), Ordering::SeqCst);
+            self.context.request_repaint_after(Duration::from_millis(16));
+        }
     }
 }
 
@@ -354,12 +362,17 @@ struct ProgressTask<T> {
 
 impl<T> ProgressTask<T> where T: Send + 'static {
     fn new(ctx: &Context, f: impl FnOnce(&Progress) -> T + Send + 'static) -> ProgressTask<T> {
-        let progress = Progress(Arc::new(Mutex::new((ctx.clone(), 0.0, "".to_string()))));
+        let progress = Progress {
+            context: ctx.clone(),
+            contents: Arc::new((0.into(), Mutex::new("".into()))),
+            local_progress: Cell::new(0.0)
+        };
+        // let progress = Progress(Arc::new(Mutex::new((ctx.clone(), 0.0, "".to_string()))));
         let progress_clone = progress.clone();
 
         let handle = std::thread::spawn(move || {
             let res = f(&progress_clone);
-            progress_clone.0.lock().unwrap().0.request_repaint_after(Duration::from_millis(16));
+            progress_clone.context.request_repaint_after(Duration::from_millis(16));
             res
         });
 
@@ -371,11 +384,11 @@ impl<T> ProgressTask<T> where T: Send + 'static {
     }
 
     fn progress(&self) -> f32 {
-        self.progress.0.lock().unwrap().1
+        f32::from_bits(self.progress.contents.0.load(Ordering::SeqCst))
     }
 
     fn text(&self) -> String {
-        self.progress.0.lock().unwrap().2.clone()
+        self.progress.contents.1.lock().unwrap().clone()
     }
 }
 
