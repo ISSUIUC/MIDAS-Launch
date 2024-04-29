@@ -1,12 +1,12 @@
-use std::io::Read;
-use dataframe::{Data, DataFrameBuilder, DataType, RowMut};
-use std::io;
+use std::collections::HashMap;
+use std::num::NonZeroU32;
+
+use ahash::AHashMap;
 use byteorder::{LittleEndian, ReadBytesExt};
 use serde::Deserialize;
 use indexmap::IndexMap;
-use std::collections::HashMap;
-use std::num::NonZeroU32;
-use ahash::AHashMap;
+
+use dataframe::{Data, DataFrameBuilder, DataType, RowMut};
 
 #[derive(Deserialize, Clone)]
 #[serde(tag = "type")]

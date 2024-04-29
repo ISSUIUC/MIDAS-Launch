@@ -1,22 +1,21 @@
 mod deserialize;
 
 use std::sync::Arc;
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::{fs, fs::File};
 use std::{io, io::{Read, Write}};
 use std::path::Path;
 use std::process::Command;
-use ahash::AHashMap;
 
+use ahash::AHashMap;
 use indexmap::IndexMap;
 use serde::Deserialize;
 use byteorder::{LittleEndian, ReadBytesExt};
 use directories::ProjectDirs;
+
 use dataframe::{Data, DataFrameBuilder, DataFrameView, DataType};
 
-use deserialize::SerializedCpp;
-use crate::deserialize::{Deserializer, DeserializerBuilder};
+use crate::deserialize::{SerializedCpp, Deserializer, DeserializerBuilder};
 
 const MAIN_SRC: &'static [u8] = include_bytes!("../src-py/__main__.py");
 const PARSER_SRC: &'static [u8] = include_bytes!("../src-py/cpp_parser.py");
