@@ -1,9 +1,8 @@
 [package]
 name = "dataframe"
-version = "1.2.0"
+version = "2.0.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-string-interner = "0.15.0"

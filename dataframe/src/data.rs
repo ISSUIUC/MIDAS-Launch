@@ -1,37 +1,60 @@
-use string_interner::{DefaultSymbol, StringInterner};
-use string_interner::backend::StringBackend;
-
 use std::fmt::{Display, Formatter};
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::num::{NonZeroU32};
 use std::ops::{RangeBounds, Bound};
 
-pub trait ColumnData: Copy + Eq + 'static {
-    const TYPE: DataType;
+struct Interner {
+    map: HashMap<&'static str, NonZeroU32>,
+    interned: Vec<Box<str>>
+}
 
-    type Context: Default;
+pub(crate) struct Context {
+    interner: Interner
+}
 
-    fn null() -> Self;
-    fn is_null(&self) -> bool {
-        self.eq(&Self::null())
-    }
-
-    fn to_data<'a>(&'a self, ctx: &'a Self::Context) -> Data<'a>;
-    fn from_data(data: &Data, ctx: &mut Self::Context) -> Option<Self>;
-
-    fn compare_not_null(&self, other: &Self, ctx: &Self::Context) -> Ordering;
-    fn compare(&self, other: &Self, ctx: &Self::Context) -> Ordering {
-        if self.is_null() && other.is_null() {
-            Ordering::Equal
-        } else if self.is_null() {
-            Ordering::Less
-        } else if other.is_null() {
-            Ordering::Greater
-        } else {
-            self.compare_not_null(other, ctx)
+impl Context {
+    pub(crate) fn new() -> Context {
+        Context {
+            interner: Interner {
+                map: HashMap::new(),
+                interned: vec![String::from("").into_boxed_str()]
+            }
         }
     }
+
+    pub(crate) fn get_or_intern(&mut self, s: impl AsRef<str>) -> NonZeroU32 {
+        let s = s.as_ref();
+        if let Some(&key) = self.interner.map.get(s) {
+            key
+        } else {
+            let key = unsafe { NonZeroU32::new_unchecked(self.interner.interned.len() as u32) };
+            let storage = String::from(s).into_boxed_str();
+            self.interner.map.insert(unsafe { std::mem::transmute(storage.as_ref()) }, key);
+            self.interner.interned.push(storage);
+            key
+        }
+    }
+
+    pub(crate) fn resolve(&self, sym: NonZeroU32) -> Option<&str> {
+        self.interner.interned.get(sym.get() as usize).map(|storage| {
+            unsafe { std::mem::transmute(storage.as_ref()) }
+        })
+    }
 }
+
+
+impl Clone for Context {
+    fn clone(&self) -> Self {
+        let mut ctx = Context::new();
+        for s in &self.interner.interned[1..] {
+            ctx.get_or_intern(s);
+        }
+        ctx
+    }
+}
+
 
 #[derive(Copy, Clone, Default, Debug)]
 pub enum Data<'a> {
@@ -150,7 +173,7 @@ impl Display for Data<'_> {
 pub enum DataType {
     Integer,
     Float,
-    Enum
+    Intern
 }
 
 impl DataType {
@@ -158,138 +181,92 @@ impl DataType {
         match self {
             DataType::Integer => s.parse::<i32>().ok().map_or(Data::Null, |num| Data::Integer(num)),
             DataType::Float => s.parse::<f32>().ok().map_or(Data::Null, |num| Data::Float(num)),
-            DataType::Enum => Data::Str(s)
-        }
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub struct Integer(pub i32);
-
-impl ColumnData for Integer {
-    const TYPE: DataType = DataType::Integer;
-    type Context = ();
-
-    fn null() -> Self {
-        Integer(i32::MIN)
-    }
-
-    fn to_data(&self, _ctx: &Self::Context) -> Data {
-        if self.is_null() {
-            Data::Null
-        } else {
-            Data::Integer(self.0)
+            DataType::Intern => Data::Str(s)
         }
     }
 
-    fn from_data(data: &Data, _ctx: &mut Self::Context) -> Option<Self> {
-        if let &Data::Integer(num) = data {
-            if num == i32::MIN {
-                None
-            } else {
-                Some(Integer(num))
+    fn convert_integer(bits: NonZeroU32) -> i32 {
+        (!bits.get() as i32).wrapping_add(2)
+    }
+
+    fn convert_float(bits: NonZeroU32) -> f32 {
+        f32::from_bits(!bits.get())
+    }
+
+    fn convert_intern(bits: NonZeroU32, ctx: &Context) -> &str {
+        ctx.resolve(bits).unwrap_or("<unknown>")
+    }
+
+    fn unconvert_integer(num: i32) -> u32 {
+        (!num as u32).wrapping_add(2)
+    }
+
+    fn unconvert_float(num: f32) -> u32 {
+        !num.to_bits()
+    }
+
+    fn unconvert_intern(s: &str, ctx: &mut Context) -> u32 {
+        ctx.get_or_intern(s).get()
+    }
+
+    pub(crate) fn to_data<'df>(&self, bits: u32, ctx: &'df Context) -> Data<'df> {
+        if let Some(bits) = NonZeroU32::new(bits) {
+            match self {
+                DataType::Integer => {
+                    Data::Integer(Self::convert_integer(bits))
+                },
+                DataType::Float => {
+                    Data::Float(Self::convert_float(bits))
+                },
+                DataType::Intern => {
+                    Data::Str(Self::convert_intern(bits, ctx))
+                }
             }
-        } else if let Data::Null = data {
-            Some(Integer::null())
         } else {
-            None
-        }
-    }
-
-    fn compare_not_null(&self, other: &Self, _ctx: &Self::Context) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct Float(pub f32);
-
-impl ColumnData for Float {
-    const TYPE: DataType = DataType::Float;
-    type Context = ();
-
-    fn null() -> Self {
-        Float(f32::MIN_POSITIVE)
-    }
-
-    fn to_data(&self, _ctx: &Self::Context) -> Data {
-        if self.is_null() {
             Data::Null
-        } else {
-            Data::Float(self.0)
         }
     }
 
-    fn from_data(data: &Data, _ctx: &mut Self::Context) -> Option<Self> {
-        if let &Data::Float(num) = data {
-            if num == f32::MIN_POSITIVE {
-                None
-            } else {
-                Some(Float(num))
+    pub(crate) fn as_data(&self, data: Data, ctx: &mut Context) -> u32 {
+        match self {
+            DataType::Integer => {
+                if let Data::Integer(num) = data {
+                    Self::unconvert_integer(num)
+                } else {
+                    0u32
+                }
             }
-        } else if let &Data::Integer(num) = data {
-            Some(Float(num as f32))
-        } else if let Data::Null = data {
-            Some(Float::null())
-        } else {
-            None
+            DataType::Float => {
+                if let Data::Float(num) = data {
+                    Self::unconvert_float(num)
+                } else if let Data::Integer(num) = data {
+                    Self::unconvert_float(num as f32)
+                } else {
+                    0u32
+                }
+            }
+            DataType::Intern => {
+                if let Data::Str(s) = data {
+                    Self::unconvert_intern(s, ctx)
+                } else {
+                    0u32
+                }
+            }
         }
     }
 
-    fn compare_not_null(&self, other: &Self, _ctx: &Self::Context) -> Ordering {
-        self.0.total_cmp(&other.0)
-    }
-}
-
-impl PartialEq for Float {
-    fn eq(&self, other: &Self) -> bool {
-        if self.0.is_nan() && other.0.is_nan() {
-            true
-        } else {
-            self.0 == other.0
+    pub(crate) fn compare(&self, a: u32, b: u32, ctx: &Context) -> Ordering {
+        match (NonZeroU32::new(a), NonZeroU32::new(b)) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(a), Some(b)) => {
+                match self {
+                    DataType::Integer => Self::convert_integer(a).cmp(&Self::convert_integer(b)),
+                    DataType::Float => Self::convert_float(a).total_cmp(&Self::convert_float(b)),
+                    DataType::Intern => Self::convert_intern(a, ctx).cmp(&Self::convert_intern(b, ctx)),
+                }
+            }
         }
-    }
-}
-
-impl Eq for Float { }
-
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub struct Enum(Option<DefaultSymbol>);
-
-impl ColumnData for Enum {
-    const TYPE: DataType = DataType::Enum;
-    type Context = StringInterner<StringBackend>;
-
-    fn null() -> Self {
-        Enum(None)
-    }
-
-    fn is_null(&self) -> bool {
-        self.0.is_none()
-    }
-
-    fn to_data<'a>(&'a self, ctx: &'a Self::Context) -> Data<'a> {
-        if let Some(sym) = self.0 {
-            Data::Str(ctx.resolve(sym).unwrap())
-        } else {
-            Data::Null
-        }
-    }
-
-    fn from_data(data: &Data, ctx: &mut Self::Context) -> Option<Self> {
-        if let &Data::Str(s) = data {
-            Some(Enum(Some(ctx.get_or_intern(s))))
-        } else if let Data::Null = data {
-            Some(Enum::null())
-        } else {
-            None
-        }
-    }
-
-    fn compare_not_null(&self, other: &Self, ctx: &Self::Context) -> Ordering {
-        let a= ctx.resolve(self.0.unwrap()).unwrap();
-        let b= ctx.resolve(other.0.unwrap()).unwrap();
-        a.cmp(b)
     }
 }

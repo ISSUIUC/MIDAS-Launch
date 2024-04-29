@@ -12,16 +12,7 @@ use crate::file_picker::FilePicker;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum ExportFormats {
-    // Json,
     Csv
-}
-
-struct JsonExport {
-    path: String,
-    omit_null: bool,
-
-    export: Option<ProgressTask<Result<(), io::Error>>>,
-    msg: Option<String>
 }
 
 struct CsvExport {
@@ -34,7 +25,6 @@ struct CsvExport {
 
 pub struct ExportTab {
     export: ExportFormats,
-    // json: JsonExport,
     csv: CsvExport
 }
 
@@ -42,13 +32,6 @@ impl ExportTab {
     pub fn new(_cc: &eframe::CreationContext) -> ExportTab {
         ExportTab {
             export: ExportFormats::Csv,
-            // json: JsonExport {
-            //     path: String::new(),
-            //     omit_null: true,
-            //
-            //     export: None,
-            //     msg: None
-            // },
             csv: CsvExport {
                 path: String::new(),
                 append_mode: false,
@@ -64,17 +47,6 @@ impl ExportTab {
     pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
         ui.add_space(3.0);
 
-        // ui.columns(2, |cols| {
-        //     cols[0].vertical_centered_justified(|ui| {
-        //         ui.selectable_value(&mut self.export, ExportFormats::Csv, "CSV")
-        //     });
-        //     cols[1].vertical_centered_justified(|ui| {
-        //         ui.selectable_value(&mut self.export, ExportFormats::Json, "JSON")
-        //     });
-        // });
-        //
-        // ui.add_space(3.0);
-
         if let Some(csv_export) = &self.csv.export {
             if csv_export.is_finished() {
                 let result = self.csv.export.take().unwrap().handle.join().unwrap();
@@ -86,18 +58,6 @@ impl ExportTab {
                 }
             }
         }
-
-        // if let Some(json_export) = &self.json.export {
-        //     if json_export.is_finished() {
-        //         let result = self.json.export.take().unwrap().handle.join().unwrap();
-        //         match result {
-        //             Ok(()) => (),
-        //             Err(e) => {
-        //                 self.json.msg = Some(e.to_string());
-        //             }
-        //         }
-        //     }
-        // }
 
         match self.export {
             ExportFormats::Csv => {
@@ -147,7 +107,7 @@ impl ExportTab {
 
                                 let total_rows = data.shape().rows;
                                 for idx in 0..total_rows {
-                                    let mut row_iterator = data.row_iter(idx);
+                                    let mut row_iterator = data.row(idx).iter();
                                     if let Some(data) = row_iterator.next() {
                                         write!(&mut file, "{}", data)?;
 
@@ -172,32 +132,6 @@ impl ExportTab {
                     }
                 });
             }
-
-            // ExportFormats::Json => {
-            //     ui.horizontal(|ui| {
-            //         ui.label("Path");
-            //         ui.add(FilePicker::new("json-picker", &mut self.json.path)
-            //             .add_filter("JSON", &["json"])
-            //             .set_is_save(true)
-            //             .dialog_title("Save"));
-            //     });
-            //
-            //     ui.horizontal(|ui| {
-            //         if let Some(export) = &self.json.export {
-            //                 ui.add_enabled(false, egui::Button::new("Export"));
-            //
-            //                 ui.add(egui::ProgressBar::new(export.progress()));
-            //         } else {
-            //             // if ui.button("Export").clicked() {
-            //
-            //             // }
-            //
-            //             if let Some(msg) = &self.json.msg {
-            //                 ui.colored_label(Color32::RED, msg);
-            //             }
-            //         }
-            //     });
-            // }
         }
     }
 }

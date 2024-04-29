@@ -1,5 +1,5 @@
 use std::io::Read;
-use dataframe::{Data, DataFrame, DataType};
+use dataframe::{Data, DataFrameBuilder, DataType, RowMut};
 use std::io;
 use byteorder::{LittleEndian, ReadBytesExt};
 use serde::Deserialize;
@@ -62,36 +62,36 @@ pub struct Deserializer {
 }
 
 impl Deserializer {
-    pub fn parse<'a, 'b>(&'a self, file: &mut impl Read, row: &mut [Data<'b>]) -> io::Result<()> where 'a: 'b {
+    pub fn parse<'a, 'b>(&'a self, file: &mut impl Read, row: &mut RowMut<'b>) -> io::Result<()> where 'a: 'b {
         let mut padding_buf = [0; 256];
         for (ty, offset) in &self.items {
             let offset = *offset;
             match ty {
                 ReadType::Bool => {
-                    row[offset] = Data::Integer((file.read_u8()? != 0) as i32);
+                    row.set_col(offset, Data::Integer((file.read_u8()? != 0) as i32));
                 }
                 ReadType::I8 => {
-                    row[offset] = Data::Integer(file.read_i8()? as i32);
+                    row.set_col(offset, Data::Integer(file.read_i8()? as i32));
                 }
                 ReadType::I32 => {
-                    row[offset] = Data::Integer(file.read_i32::<LittleEndian>()?);
+                    row.set_col(offset, Data::Integer(file.read_i32::<LittleEndian>()?));
                 }
                 ReadType::U8 => {
-                    row[offset] = Data::Integer(file.read_u8()? as i32);
+                    row.set_col(offset, Data::Integer(file.read_u8()? as i32));
                 }
                 ReadType::U32 => {
-                    row[offset] = Data::Integer(file.read_u32::<LittleEndian>()? as i32);
+                    row.set_col(offset, Data::Integer(file.read_u32::<LittleEndian>()? as i32));
                 }
                 ReadType::F32 => {
-                    row[offset] = Data::Float(file.read_f32::<LittleEndian>()?);
+                    row.set_col(offset, Data::Float(file.read_f32::<LittleEndian>()?));
                 }
                 ReadType::F64 => {
-                    row[offset] = Data::Float(file.read_f64::<LittleEndian>()? as f32);
+                    row.set_col(offset, Data::Float(file.read_f64::<LittleEndian>()? as f32));
                 }
                 ReadType::Discriminant(idx) => {
                     let disc = file.read_u32::<LittleEndian>()?;
                     let name = self.enums[*idx as usize].get(&disc).map_or("<unknown>", |name| name);
-                    row[offset] = Data::Str(name);
+                    row.set_col(offset, Data::Str(name));
                 }
                 ReadType::Padding(amount) => {
                     file.read_exact(&mut padding_buf[..*amount as usize])?;
@@ -103,7 +103,7 @@ impl Deserializer {
 }
 
 pub struct DeserializerBuilder<'a> {
-    in_table: &'a mut DataFrame,
+    builder: &'a mut DataFrameBuilder,
 
     items: Vec<(ReadType, usize)>,
     offset: usize,
@@ -111,9 +111,9 @@ pub struct DeserializerBuilder<'a> {
 }
 
 impl<'a> DeserializerBuilder<'a> {
-    pub fn new(in_table: &'a mut DataFrame) -> DeserializerBuilder<'a> {
+    pub fn new(builder: &'a mut DataFrameBuilder) -> DeserializerBuilder<'a> {
         DeserializerBuilder {
-            in_table,
+            builder,
             items: vec![],
             offset: 0,
             enums: vec![]
@@ -125,49 +125,49 @@ impl<'a> DeserializerBuilder<'a> {
     }
 
     fn read_bool(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.builder.add_column(name, DataType::Integer);
         self.items.push((ReadType::Bool, offset));
         self.offset += 1;
     }
 
     fn read_i8(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.builder.add_column(name, DataType::Integer);
         self.items.push((ReadType::I8, offset));
         self.offset += 1;
     }
 
     fn read_i32(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.builder.add_column(name, DataType::Integer);
         self.items.push((ReadType::I32, offset));
         self.offset += 4;
     }
 
     fn read_u8(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.builder.add_column(name, DataType::Integer);
         self.items.push((ReadType::U8, offset));
         self.offset += 1;
     }
 
     fn read_u32(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Integer);
+        let offset = self.builder.add_column(name, DataType::Integer);
         self.items.push((ReadType::U32, offset));
         self.offset += 4;
     }
 
     fn read_f32(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Float);
+        let offset = self.builder.add_column(name, DataType::Float);
         self.items.push((ReadType::F32, offset));
         self.offset += 4;
     }
 
     fn read_f64(&mut self, name: impl Into<String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Float);
+        let offset = self.builder.add_column(name, DataType::Float);
         self.items.push((ReadType::F64, offset));
         self.offset += 8;
     }
 
     fn read_enum(&mut self, name: impl Into<String>, variants: HashMap<u32, String>) {
-        let offset = self.in_table.add_null_col(name, DataType::Enum);
+        let offset = self.builder.add_column(name, DataType::Intern);
         let idx = self.enums.len() as u8;
         self.enums.push(variants);
         self.items.push((ReadType::Discriminant(idx), offset));

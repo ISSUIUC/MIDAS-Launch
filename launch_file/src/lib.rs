@@ -1,5 +1,6 @@
 mod deserialize;
 
+use std::sync::Arc;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::{fs, fs::File};
@@ -11,7 +12,7 @@ use indexmap::IndexMap;
 use serde::Deserialize;
 use byteorder::{LittleEndian, ReadBytesExt};
 use directories::ProjectDirs;
-use dataframe::{Data, DataFrame, DataType};
+use dataframe::{Data, DataFrameBuilder, DataFrameView, DataType};
 
 use deserialize::SerializedCpp;
 use crate::deserialize::{Deserializer, DeserializerBuilder};
@@ -95,34 +96,37 @@ impl LogFormat {
         Ok(format)
     }
 
-    pub fn read_file(&self, file: &mut impl Read, file_size: Option<u64>, mut on_row_callback: impl FnMut(u64)) -> io::Result<DataFrame> {
-        let mut dataframe = DataFrame::new();
-        dataframe.add_null_col("sensor", DataType::Enum);
-        dataframe.add_null_col("timestamp", DataType::Integer);
+    pub fn read_file(&self, file: &mut impl Read, file_size: Option<u64>, mut on_row_callback: impl FnMut(u64)) -> io::Result<DataFrameView> {
+        let mut dataframe_builder = DataFrameBuilder::new();
+        dataframe_builder.add_column("sensor", DataType::Intern);
+        dataframe_builder.add_column("timestamp", DataType::Integer);
 
         let mut variants: HashMap<u32, (String, Deserializer)> = HashMap::new();
         let mut smallest = usize::MAX;
         for (name, (disc, format)) in &self.variants {
-            let mut builder = DeserializerBuilder::new(&mut dataframe);
+            let mut builder = DeserializerBuilder::new(&mut dataframe_builder);
             format.to_fast(&mut builder, name);
             let fast_format = builder.finish();
             smallest = smallest.min(fast_format.size).max(1);
             variants.insert(*disc, (name.clone(), fast_format));
         }
+        let mut dataframe = dataframe_builder.build();
+        let mut row_numbers = Vec::new();
         if let Some(file_size) = file_size {
-            dataframe.hint_rows((file_size / (smallest as u64 + 8)) as usize);
+            let rows = (file_size / (smallest as u64 + 8)) as usize;
+            dataframe.hint_rows(rows);
+            row_numbers.reserve(rows);
         }
 
-        let num_cols = dataframe.shape().cols;
-
         let mut offset: u64 = 0;
+        let mut i = 0;
 
         let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
 
         let result: io::Result<()> = try_catch!({
-            let mut row = vec![Data::Null; num_cols];
             loop {
-                row.fill(Data::Null);
+                let row_idx = dataframe.add_null_row();
+                let mut row = dataframe.row_mut(row_idx);
 
                 let determinant = file.read_u32::<LittleEndian>()?; offset += 4;
                 let timestamp_ms = file.read_u32::<LittleEndian>()?; offset += 4;
@@ -130,13 +134,14 @@ impl LogFormat {
                 let (name, fast_format) = variants.get(&determinant)
                     .ok_or_else(|| io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 8)))?;
 
-                row[0] = Data::Str(name);
-                row[1] = Data::Integer(timestamp_ms as i32);
+                row.set_col(0, Data::Str(name));
+                row.set_col(1, Data::Integer(timestamp_ms as i32));
 
                 fast_format.parse(file, &mut row)?;
+                row_numbers.push(i);
                 offset += fast_format.size as u64;
+                i += 1;
 
-                dataframe.add_row(&row);
                 on_row_callback(offset);
             }
         });
@@ -145,7 +150,10 @@ impl LogFormat {
         dataframe.hint_complete();
 
         if result.kind() == io::ErrorKind::UnexpectedEof {
-            Ok(dataframe)
+            Ok(DataFrameView {
+                rows: row_numbers,
+                df: Arc::new(dataframe)
+            })
         } else {
             Err(result)
         }

@@ -1,9 +1,10 @@
+use std::num::NonZeroU32;
 use std::ops::Bound;
 
 use egui::Ui;
 use eframe::Storage;
 
-use dataframe::{Column, ColumnMut, Data, DataFrameView};
+use dataframe::DataFrameView;
 
 use crate::DataShared;
 use crate::{ProgressTask, Progress};
@@ -71,38 +72,47 @@ impl Step {
 
     fn apply(&self, mut df: DataFrameView, progress: &Progress) -> DataFrameView {
         match self {
-            Step::Fill(_, _, and_before) => {
+            &Step::Fill(_, _, and_before) => {
                 let shape = df.shape();
 
-                for col_idx in 0..shape.cols {
-                    let mut col = df.col_mut(col_idx);
-                    let mut prev_value = Data::Null;
-                    if *and_before {
-                        for row_idx in 0..shape.rows {
-                            let data = col.get_row_data(row_idx);
-                            if !data.is_null() {
-                                prev_value = unsafe { std::mem::transmute(data) };
-                                break;
+                let mut prev_values: Vec<Option<NonZeroU32>> = vec![None; shape.cols];
+                if and_before {
+                    for row_idx in 0..shape.rows {
+                        let row = df.row(row_idx);
+                        let mut any_null = false;
+                        for (i, &value) in row.raw_slice().iter().enumerate() {
+                            if prev_values[i].is_none() {
+                                if let Some(value) = value {
+                                    prev_values[i] = Some(value);
+                                } else {
+                                    any_null = true;
+                                }
                             }
                         }
+                        if !any_null {
+                            break;
+                        }
                     }
+                }
 
-                    for row_idx in 0..shape.rows {
-                        let data = col.get_row_data(row_idx);
-                        if data.is_null() {
-                            col.set_row_data(row_idx, &prev_value);
+                for row_idx in 0..shape.rows {
+                    let mut row = df.row_mut(row_idx);
+
+                    for (i, prev_value) in prev_values.iter_mut().enumerate() {
+                        if let Some(value) = row.get_col_raw(i) {
+                            *prev_value = Some(value);
                         } else {
-                            prev_value = unsafe { std::mem::transmute(data) };
+                            row.set_col_raw(i, *prev_value);
                         }
                     }
 
-                    progress.set(col_idx as f32 / shape.cols as f32);
+                    progress.set(row_idx as f32 / shape.rows as f32);
                 }
 
                 df
             }
             Step::ColEq(_, col_idx, value) => {
-                let equal_to = df.df.cols()[*col_idx].data_type().parse_str(value);
+                let equal_to = df.df.col(*col_idx).data_type().parse_str(value);
                 let rows = df.shape().rows as f32;
 
                 progress.set(0.0);
@@ -118,7 +128,7 @@ impl Step {
                 df
             }
             Step::Within(_, col_idx, has_lower_bound, lower_bound, has_upper_bound, upper_bound) => {
-                let dtype = df.df.cols()[*col_idx].data_type();
+                let dtype = df.df.col(*col_idx).data_type();
                 let rows = df.shape().rows as f32;
 
                 let bounds = (

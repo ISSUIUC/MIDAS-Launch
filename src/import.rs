@@ -8,7 +8,7 @@ use egui::{Color32, Ui};
 use eframe::Storage;
 
 use launch_file::LogFormat;
-use dataframe::{DataFrame, DataFrameView};
+use dataframe::DataFrameView;
 
 use crate::DataShared;
 use crate::ProgressTask;
@@ -75,7 +75,7 @@ struct ImportLaunchTab {
     loaded_format: Option<LogFormat>,
     format_message: Option<String>,
 
-    parsing: Option<ProgressTask<Result<DataFrame, io::Error>>>,
+    parsing: Option<ProgressTask<Result<DataFrameView, io::Error>>>,
     parsing_message: Option<String>
 }
 
@@ -215,7 +215,7 @@ impl ImportLaunchTab {
                     let result = self.parsing.take().unwrap().handle.join().unwrap();
                     match result {
                         Ok(dataframe) => {
-                            shared.replace(DataShared::new(DataFrameView::from_dataframe(dataframe)));
+                            shared.replace(DataShared::new(dataframe));
                         }
                         Err(e) => {
                             self.parsing_message = Some(e.to_string());
@@ -263,7 +263,7 @@ impl ImportLaunchTab {
 struct ImportCSVTab {
     source_path: String,
 
-    parsing: Option<ProgressTask<Result<DataFrame, io::Error>>>,
+    parsing: Option<ProgressTask<Result<DataFrameView, io::Error>>>,
     parsing_message: Option<String>
 }
 
@@ -293,7 +293,7 @@ impl ImportCSVTab {
                     let result = self.parsing.take().unwrap().handle.join().unwrap();
                     match result {
                         Ok(dataframe) => {
-                            shared.replace(DataShared::new(DataFrameView::from_dataframe(dataframe)));
+                            shared.replace(DataShared::new(dataframe));
                         }
                         Err(e) => {
                             self.parsing_message = Some(e.to_string());
@@ -319,7 +319,7 @@ impl ImportCSVTab {
                             let mut file = BufReader::new(File::open(source_path)?);
                             let size: u64 = file.get_ref().metadata().map_or(0, |m| m.len());
 
-                            DataFrame::from_csv(&mut file, |offset| {
+                            DataFrameView::from_csv(&mut file, |offset| {
                                 progress.set(offset as f32 / size as f32);
                             })
                         }));

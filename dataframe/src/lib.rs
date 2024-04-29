@@ -1,18 +1,7 @@
-mod column;
 mod view;
-mod buffer;
 mod data;
-// mod new;
+mod frame;
 
-pub use view::{DataFrameView, ColumnView, ColumnViewMut};
-pub use buffer::DataFrame;
+pub use view::{DataFrameView, ColumnView};
 pub use data::{Data, DataType};
-pub use column::{Column, ColumnMut};
-
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Shape {
-    pub rows: usize,
-    pub cols: usize
-}
-
+pub use frame::{Shape, DataFrame, DataFrameBuilder, Row, RowMut, ColumnInfo};

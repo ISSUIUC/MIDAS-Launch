@@ -15,7 +15,7 @@ use egui_plot as plot;
 use eframe::{Frame, Storage};
 // use egui_extras::image;
 
-use dataframe::{Column, DataFrameView};
+use dataframe::{DataFrameView};
 
 use crate::import::ImportTab;
 use crate::process::ProcessTab;
@@ -193,7 +193,7 @@ impl eframe::App for App {
 
                     match self.visual_state {
                         VisualState::Table => {
-
+                            let _ = &self.table_tab;
                         }
                         VisualState::Plot => {
                             egui::Frame::group(ui.style())
@@ -259,7 +259,7 @@ impl eframe::App for App {
                                 .body(|body| {
                                     let num_rows = data.shape().rows;
                                     body.rows(28.0, num_rows, |mut row| {
-                                        let data_row = data.row_iter(row.index());
+                                        let data_row = data.row(row.index()).iter();
                                         for item in data_row {
                                             row.col(|ui| {
                                                 let text = item.to_string();
@@ -283,7 +283,7 @@ impl eframe::App for App {
                                 let modulus = (total_rows / required_rows).max(1);
                                 let mut points: Vec<[f64; 2]> = Vec::with_capacity(required_rows);
                                 points.extend((0..data.shape().rows).step_by(modulus).filter_map(|row_idx| {
-                                    let (x_point, y_point) = (x_data.get_row_data(row_idx), y_data.get_row_data(row_idx));
+                                    let (x_point, y_point) = (x_data.get_row(row_idx), y_data.get_row(row_idx));
                                     if let (Some(x), Some(y)) = (x_point.as_float(), y_point.as_float()) {
                                         Some([x as f64, y as f64])
                                     } else {
@@ -320,6 +320,11 @@ impl eframe::App for App {
         self.import_tab.save(storage);
         self.process_tab.save(storage);
         self.export_tab.save(storage);
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let current_data = self.shared.take();
+        std::mem::forget(current_data);
     }
 
     fn persist_egui_memory(&self) -> bool { false }
@@ -379,7 +384,7 @@ fn main() -> eframe::Result<()> {
     // let v = egui::include_image!("../iss-logo.png");
     let icon_img = image::load_from_memory_with_format(include_bytes!("../iss-logo.png"), image::ImageFormat::Png).unwrap().into_rgba8();
 
-    let mut viewport = egui::ViewportBuilder::default()
+    let viewport = egui::ViewportBuilder::default()
         .with_icon(egui::IconData {
             width: icon_img.width(),
             height: icon_img.height(),
