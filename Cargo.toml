@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "midas-launch"
-version = "1.2.1"
+version = "1.2.2"
 edition = "2021"
 rust-version = "1.77.1"
 
@@ -15,9 +15,9 @@ opt-level = 1
 dataframe = { path = "dataframe" }
 launch_file = { path = "launch_file" }
 egui = { version = "0.27.2", features = ["persistence"] }
-egui_extras = { version = "0.27.2"}
+egui_extras = { version = "0.27.2", default-features = false }
 egui_plot = { version = "0.27.2" }
-eframe = { version = "0.27.2", features = ["persistence"] }
-image = { version = "0.25.1", features = ["png"] }
+eframe = { version = "0.27.2", features = ["default_fonts", "glow", "wayland", "x11", "persistence"], default-features = false }
+image = { version = "0.24.9", features = ["png"], default-features = false }
 rfd = "0.14.1"
 futures-lite = { version = "2.3.0" }
