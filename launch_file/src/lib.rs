@@ -7,6 +7,7 @@ use std::{fs, fs::File};
 use std::{io, io::{Read, Write}};
 use std::path::Path;
 use std::process::Command;
+use ahash::AHashMap;
 
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -101,7 +102,7 @@ impl LogFormat {
         dataframe_builder.add_column("sensor", DataType::Intern);
         dataframe_builder.add_column("timestamp", DataType::Integer);
 
-        let mut variants: HashMap<u32, (String, Deserializer)> = HashMap::new();
+        let mut variants: AHashMap<u32, (String, Deserializer)> = AHashMap::new();
         let mut smallest = usize::MAX;
         for (name, (disc, format)) in &self.variants {
             let mut builder = DeserializerBuilder::new(&mut dataframe_builder);

@@ -12,3 +12,4 @@ serde = { version = "1.0.198", features = ["derive"] }
 serde_json = { version = "1.0.115" }
 byteorder = "1.5.0"
 directories = "5.0.1"
+ahash = "0.8.11"
