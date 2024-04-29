@@ -13,7 +13,6 @@ opt-level = 1
 
 [profile.profile]
 inherits = "release"
-opt-level = 2
 debug = 1
 
 [dependencies]

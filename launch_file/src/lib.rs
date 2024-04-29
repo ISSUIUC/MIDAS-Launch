@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::ffi::OsStr;
 use std::{fs, fs::File};
 use std::{io, io::{Read, Write}};
+use std::num::NonZeroU32;
 use std::path::Path;
 use std::process::Command;
 
@@ -101,7 +102,7 @@ impl LogFormat {
         dataframe_builder.add_column("sensor", DataType::Intern);
         dataframe_builder.add_column("timestamp", DataType::Integer);
 
-        let mut variants: AHashMap<u32, (String, Deserializer)> = AHashMap::new();
+        let mut variants: AHashMap<u32, (NonZeroU32, Deserializer)> = AHashMap::new();
         let mut smallest = usize::MAX;
         let mut largest = usize::MIN;
         for (name, (disc, format)) in &self.variants {
@@ -110,7 +111,9 @@ impl LogFormat {
             let fast_format = builder.finish();
             smallest = smallest.min(fast_format.size).max(1);
             largest = largest.max(fast_format.size);
-            variants.insert(*disc, (name.clone(), fast_format));
+
+            let key = dataframe_builder.add_interned_string(name);
+            variants.insert(*disc, (key, fast_format));
         }
         let mut dataframe;
         let mut row_numbers = Vec::new();
@@ -136,11 +139,12 @@ impl LogFormat {
                 let determinant = file.read_u32::<LittleEndian>()?; offset += 4;
                 let timestamp_ms = file.read_u32::<LittleEndian>()?; offset += 4;
 
-                let (name, fast_format) = variants.get(&determinant)
+                let (key, fast_format) = variants.get(&determinant)
                     .ok_or_else(|| io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 8)))?;
 
-                row.set_col(0, Data::Str(name));
-                row.set_col(1, Data::Integer(timestamp_ms as i32));
+                row.set_col_raw(0, Some(*key));
+                // row.set_col_with_ty(0, DataType::Intern, Data::Str(name));
+                row.set_col_with_ty(1, DataType::Integer, Data::Integer(timestamp_ms as i32));
 
                 file.read_exact(&mut read_buf[..fast_format.size])?;
 

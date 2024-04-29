@@ -74,7 +74,7 @@ impl DataFrameBuilder {
         DataFrame {
             mem: Vec::new(),
             rows: 0,
-            context: data::Context::new(),
+            context: self.context,
             header: layout
         }
     }
@@ -86,7 +86,7 @@ impl DataFrameBuilder {
         DataFrame {
             mem: vec![0; capacity * layout.size()],
             rows: 0,
-            context: data::Context::new(),
+            context: self.context,
             header: layout
         }
     }
@@ -137,7 +137,7 @@ impl<'df> RowMut<'df> {
     }
 
     pub fn set_col_raw(&mut self, idx: usize, value: Option<NonZeroU32>) {
-        self.mem[idx] = value.map_or(0, NonZeroU32::get);
+        self.mem[idx] = unsafe { std::mem::transmute::<Option<NonZeroU32>, u32>(value) };
     }
 
     pub fn get_col(&self, idx: usize) -> Data {
@@ -147,6 +147,10 @@ impl<'df> RowMut<'df> {
 
     pub fn set_col(&mut self, idx: usize, value: Data<'df>) {
         self.mem[idx] = self.header.col_info(idx).ty.as_data(value, self.ctx);
+    }
+
+    pub fn set_col_with_ty(&mut self, idx: usize, ty: DataType, value: Data<'df>) {
+        self.mem[idx] = ty.as_data(value, self.ctx);
     }
 }
 

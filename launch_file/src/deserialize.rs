@@ -71,25 +71,25 @@ impl Deserializer {
             let offset = *offset;
             match ty {
                 ReadType::Bool => {
-                    row.set_col(offset, Data::Integer((buf.read_u8().unwrap() != 0) as i32));
+                    row.set_col_with_ty(offset, DataType::Integer, Data::Integer((buf.read_u8().unwrap() != 0) as i32));
                 }
                 ReadType::I8 => {
-                    row.set_col(offset, Data::Integer(buf.read_i8().unwrap() as i32));
+                    row.set_col_with_ty(offset, DataType::Integer, Data::Integer(buf.read_i8().unwrap() as i32));
                 }
                 ReadType::I32 => {
-                    row.set_col(offset, Data::Integer(buf.read_i32::<LittleEndian>().unwrap()));
+                    row.set_col_with_ty(offset, DataType::Integer, Data::Integer(buf.read_i32::<LittleEndian>().unwrap()));
                 }
                 ReadType::U8 => {
-                    row.set_col(offset, Data::Integer(buf.read_u8().unwrap() as i32));
+                    row.set_col_with_ty(offset, DataType::Integer, Data::Integer(buf.read_u8().unwrap() as i32));
                 }
                 ReadType::U32 => {
-                    row.set_col(offset, Data::Integer(buf.read_u32::<LittleEndian>().unwrap() as i32));
+                    row.set_col_with_ty(offset, DataType::Integer, Data::Integer(buf.read_u32::<LittleEndian>().unwrap() as i32));
                 }
                 ReadType::F32 => {
-                    row.set_col(offset, Data::Float(buf.read_f32::<LittleEndian>().unwrap()));
+                    row.set_col_with_ty(offset, DataType::Float, Data::Float(buf.read_f32::<LittleEndian>().unwrap()));
                 }
                 ReadType::F64 => {
-                    row.set_col(offset, Data::Float(buf.read_f64::<LittleEndian>().unwrap() as f32));
+                    row.set_col_with_ty(offset, DataType::Float, Data::Float(buf.read_f64::<LittleEndian>().unwrap() as f32));
                 }
                 ReadType::Discriminant(idx) => {
                     let disc = buf.read_u32::<LittleEndian>().unwrap();
