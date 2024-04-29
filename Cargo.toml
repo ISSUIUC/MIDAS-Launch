@@ -11,6 +11,10 @@ rust-version = "1.77.1"
 [profile.dev]
 opt-level = 1
 
+[profile.profile]
+inherits = "release"
+debug = 1
+
 [dependencies]
 dataframe = { path = "dataframe" }
 launch_file = { path = "launch_file" }

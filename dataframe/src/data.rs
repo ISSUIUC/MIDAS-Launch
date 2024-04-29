@@ -1,12 +1,13 @@
 use std::fmt::{Display, Formatter};
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::num::{NonZeroU32};
 use std::ops::{RangeBounds, Bound};
 
+use ahash::AHashMap;
+
 struct Interner {
-    map: HashMap<&'static str, NonZeroU32>,
+    map: AHashMap<&'static str, NonZeroU32>,
     interned: Vec<Box<str>>
 }
 
@@ -18,7 +19,7 @@ impl Context {
     pub(crate) fn new() -> Context {
         Context {
             interner: Interner {
-                map: HashMap::new(),
+                map: AHashMap::new(),
                 interned: vec![String::from("").into_boxed_str()]
             }
         }

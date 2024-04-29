@@ -110,12 +110,14 @@ impl LogFormat {
             smallest = smallest.min(fast_format.size).max(1);
             variants.insert(*disc, (name.clone(), fast_format));
         }
-        let mut dataframe = dataframe_builder.build();
+        let mut dataframe;
         let mut row_numbers = Vec::new();
         if let Some(file_size) = file_size {
             let rows = (file_size / (smallest as u64 + 8)) as usize;
-            dataframe.hint_rows(rows);
+            dataframe = dataframe_builder.build_with_capacity(rows);
             row_numbers.reserve(rows);
+        } else {
+            dataframe = dataframe_builder.build();
         }
 
         let mut offset: u64 = 0;

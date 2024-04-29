@@ -72,6 +72,18 @@ impl DataFrameBuilder {
             header: layout
         }
     }
+
+    pub fn build_with_capacity(self, capacity: usize) -> DataFrame {
+        let layout = Header {
+            columns: self.columns
+        };
+        DataFrame {
+            mem: vec![0; capacity * layout.size()],
+            rows: 0,
+            context: data::Context::new(),
+            header: layout
+        }
+    }
 }
 
 pub struct Row<'df> {
@@ -180,13 +192,13 @@ impl DataFrame {
     }
 
     pub fn hint_rows(&mut self, rows: usize) {
-        if rows * self.header.size() > self.mem.capacity() {
-            let extra = rows * self.header.size() - self.mem.capacity();
-            self.mem.reserve(extra);
+        if rows * self.header.size() > self.mem.len() {
+            self.mem.resize(rows * self.header.size(), 0);
         }
     }
 
     pub fn hint_complete(&mut self) {
+        self.mem.truncate(self.rows * self.header.size());
         self.mem.shrink_to_fit();
     }
 
@@ -237,10 +249,16 @@ impl DataFrame {
     // }
 
     pub fn add_null_row(&mut self) -> usize {
-        let idx = self.rows;
-        self.mem.extend((0..self.header.columns.len()).map(|_| 0u32));
-        self.rows += 1;
-        idx
+        if self.rows * self.header.size() < self.mem.len() {
+            let idx = self.rows;
+            self.rows += 1;
+            idx
+        } else {
+            let idx = self.rows;
+            self.mem.extend((0..self.header.columns.len()).map(|_| 0u32));
+            self.rows += 1;
+            idx
+        }
     }
 
     pub fn add_row(&mut self, datas: &[Data]) -> usize {
