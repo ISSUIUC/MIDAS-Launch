@@ -5,6 +5,8 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use serde::Deserialize;
 use indexmap::IndexMap;
 use std::collections::HashMap;
+use std::num::NonZeroU32;
+use ahash::AHashMap;
 
 #[derive(Deserialize, Clone)]
 #[serde(tag = "type")]
@@ -57,7 +59,7 @@ pub enum ReadType {
 
 pub struct Deserializer {
     items: Vec<(ReadType, usize)>,
-    enums: Vec<HashMap<u32, String>>,
+    enums: Vec<AHashMap<u32, NonZeroU32>>,
     pub size: usize
 }
 
@@ -91,8 +93,8 @@ impl Deserializer {
                 }
                 ReadType::Discriminant(idx) => {
                     let disc = buf.read_u32::<LittleEndian>().unwrap();
-                    let name = self.enums[*idx as usize].get(&disc).map_or("<unknown>", |name| name);
-                    row.set_col(offset, Data::Str(name));
+                    let value = self.enums[*idx as usize].get(&disc).cloned();
+                    row.set_col_raw(offset, value);
                 }
                 &ReadType::Padding(amount) => {
                     buf = &buf[amount as usize..];
@@ -107,7 +109,7 @@ pub struct DeserializerBuilder<'a> {
 
     items: Vec<(ReadType, usize)>,
     offset: usize,
-    enums: Vec<HashMap<u32, String>>
+    enums: Vec<AHashMap<u32, NonZeroU32>>
 }
 
 impl<'a> DeserializerBuilder<'a> {
@@ -169,7 +171,11 @@ impl<'a> DeserializerBuilder<'a> {
     fn read_enum(&mut self, name: impl Into<String>, variants: HashMap<u32, String>) {
         let offset = self.builder.add_column(name, DataType::Intern);
         let idx = self.enums.len() as u8;
-        self.enums.push(variants);
+        let mut variant_to_intern = AHashMap::new();
+        for (disc, name) in variants {
+            variant_to_intern.insert(disc, self.builder.add_interned_string(name));
+        }
+        self.enums.push(variant_to_intern);
         self.items.push((ReadType::Discriminant(idx), offset));
         self.offset += 4;
     }

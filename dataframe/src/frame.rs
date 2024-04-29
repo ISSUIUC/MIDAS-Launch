@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::num::NonZeroU32;
+use ahash::HashMap;
 
 use crate::{data, data::{Data, DataType}};
 
@@ -39,14 +40,16 @@ impl Header {
 
 pub struct DataFrameBuilder {
     offset: usize,
-    columns: Vec<ColumnInfo>
+    columns: Vec<ColumnInfo>,
+    context: data::Context,
 }
 
 impl DataFrameBuilder {
     pub fn new() -> Self {
         DataFrameBuilder {
             offset: 0,
-            columns: vec![]
+            columns: vec![],
+            context: data::Context::new()
         }
     }
 
@@ -59,6 +62,10 @@ impl DataFrameBuilder {
         });
         self.offset += 1;
         offset
+    }
+
+    pub fn add_interned_string(&mut self, s: impl AsRef<str>) -> NonZeroU32 {
+        self.context.get_or_intern(s)
     }
 
     pub fn build(self) -> DataFrame {
