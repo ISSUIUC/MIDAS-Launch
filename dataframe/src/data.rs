@@ -5,7 +5,8 @@ use std::fmt::{Display, Formatter};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::ops::{RangeBounds, Bound};
-use byteorder::{ReadBytesExt, LittleEndian};
+use byteorder::{WriteBytesExt, ReadBytesExt, LittleEndian};
+use crate::data;
 
 pub trait ColumnData: Copy + Eq + 'static {
     const TYPE: DataType;
@@ -194,17 +195,32 @@ impl DataTypeNew {
         }
     }
 
-    pub fn read(&self, mut data: &[u8]) -> Data {
+    pub fn read(&self, mut mem: &[u8]) -> Data {
         match self {
-            DataTypeNew::Bool => Data::Integer(data.read_u8().unwrap() as i64),
-            DataTypeNew::I8 => Data::Integer(data.read_i8().unwrap() as i64),
-            DataTypeNew::I32 => Data::Integer(data.read_i32::<LittleEndian>().unwrap() as i64),
-            DataTypeNew::U8 => Data::Integer(data.read_u8().unwrap() as i64),
-            DataTypeNew::U32 => Data::Integer(data.read_u32::<LittleEndian>().unwrap() as i64),
-            DataTypeNew::F32 => Data::Float(data.read_f32::<LittleEndian>().unwrap() as f64),
-            DataTypeNew::F64 => Data::Float(data.read_f64::<LittleEndian>().unwrap() as f64),
+            DataTypeNew::Bool => Data::Integer(mem.read_u8().unwrap() as i64),
+            DataTypeNew::I8 => Data::Integer(mem.read_i8().unwrap() as i64),
+            DataTypeNew::I32 => Data::Integer(mem.read_i32::<LittleEndian>().unwrap() as i64),
+            DataTypeNew::U8 => Data::Integer(mem.read_u8().unwrap() as i64),
+            DataTypeNew::U32 => Data::Integer(mem.read_u32::<LittleEndian>().unwrap() as i64),
+            DataTypeNew::F32 => Data::Float(mem.read_f32::<LittleEndian>().unwrap() as f64),
+            DataTypeNew::F64 => Data::Float(mem.read_f64::<LittleEndian>().unwrap() as f64),
             DataTypeNew::Enum => Data::Str("_"),
         }
+    }
+
+    pub fn write(&self, data: &Data, mut mem: &mut [u8]) {
+        match (self,data) {
+            (DataTypeNew::Bool, Data::Integer(i)) => mem.write_u8(*i as u8),
+            (DataTypeNew::I8, Data::Integer(i)) => mem.write_i8(*i as i8),
+            (DataTypeNew::I32, Data::Integer(i)) => mem.write_i32::<LittleEndian>(*i as i32),
+            (DataTypeNew::U8, Data::Integer(i)) => mem.write_u8(*i as u8),
+            (DataTypeNew::U32, Data::Integer(i)) => mem.write_u32::<LittleEndian>(*i as u32),
+            (DataTypeNew::F32, Data::Float(f)) => mem.write_f32::<LittleEndian>(*f as f32),
+            (DataTypeNew::F64, Data::Float(f)) => mem.write_f64::<LittleEndian>(*f as f64),
+            (DataTypeNew::Enum, Data::Str(s)) => mem.write_u32::<LittleEndian>(0),
+            (_, Data::Null) => Ok(mem.fill(0xff)),
+            _ => panic!()
+        }.unwrap();
     }
 }
 

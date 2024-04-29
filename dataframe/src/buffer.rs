@@ -186,7 +186,15 @@ impl DataFrameNew {
     }
 
     pub fn set_data(&mut self, row: usize, col: usize, data: &Data) {
-        todo!()
+        let block_idx = row / ROWS_PER_BLOCK;
+        let row_offset = (row % ROWS_PER_BLOCK) * self.width;
+        let col = &self.columns[col];
+        let base_offset = col.offset;
+        let width = col.ty.width();
+
+        let off = row_offset + base_offset;
+        let slice = &mut self.backing[block_idx][off..(off+width)];
+        col.ty.write(data, slice);
     }
 }
 
