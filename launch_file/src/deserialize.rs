@@ -62,43 +62,43 @@ pub struct Deserializer {
 }
 
 impl Deserializer {
-    pub fn parse<'a, 'b>(&'a self, file: &mut impl Read, row: &mut RowMut<'b>) -> io::Result<()> where 'a: 'b {
-        let mut padding_buf = [0; 256];
+    pub fn parse<'a, 'b>(&'a self, mut buf: &[u8], row: &mut RowMut<'b>) where 'a: 'b {
+        debug_assert_eq!(buf.len(), self.size);
+        // let mut padding_buf = [0; 256];
         for (ty, offset) in &self.items {
             let offset = *offset;
             match ty {
                 ReadType::Bool => {
-                    row.set_col(offset, Data::Integer((file.read_u8()? != 0) as i32));
+                    row.set_col(offset, Data::Integer((buf.read_u8().unwrap() != 0) as i32));
                 }
                 ReadType::I8 => {
-                    row.set_col(offset, Data::Integer(file.read_i8()? as i32));
+                    row.set_col(offset, Data::Integer(buf.read_i8().unwrap() as i32));
                 }
                 ReadType::I32 => {
-                    row.set_col(offset, Data::Integer(file.read_i32::<LittleEndian>()?));
+                    row.set_col(offset, Data::Integer(buf.read_i32::<LittleEndian>().unwrap()));
                 }
                 ReadType::U8 => {
-                    row.set_col(offset, Data::Integer(file.read_u8()? as i32));
+                    row.set_col(offset, Data::Integer(buf.read_u8().unwrap() as i32));
                 }
                 ReadType::U32 => {
-                    row.set_col(offset, Data::Integer(file.read_u32::<LittleEndian>()? as i32));
+                    row.set_col(offset, Data::Integer(buf.read_u32::<LittleEndian>().unwrap() as i32));
                 }
                 ReadType::F32 => {
-                    row.set_col(offset, Data::Float(file.read_f32::<LittleEndian>()?));
+                    row.set_col(offset, Data::Float(buf.read_f32::<LittleEndian>().unwrap()));
                 }
                 ReadType::F64 => {
-                    row.set_col(offset, Data::Float(file.read_f64::<LittleEndian>()? as f32));
+                    row.set_col(offset, Data::Float(buf.read_f64::<LittleEndian>().unwrap() as f32));
                 }
                 ReadType::Discriminant(idx) => {
-                    let disc = file.read_u32::<LittleEndian>()?;
+                    let disc = buf.read_u32::<LittleEndian>().unwrap();
                     let name = self.enums[*idx as usize].get(&disc).map_or("<unknown>", |name| name);
                     row.set_col(offset, Data::Str(name));
                 }
-                ReadType::Padding(amount) => {
-                    file.read_exact(&mut padding_buf[..*amount as usize])?;
+                &ReadType::Padding(amount) => {
+                    buf = &buf[amount as usize..];
                 }
             }
         }
-        Ok(())
     }
 }
 

@@ -104,11 +104,13 @@ impl LogFormat {
 
         let mut variants: AHashMap<u32, (String, Deserializer)> = AHashMap::new();
         let mut smallest = usize::MAX;
+        let mut largest = usize::MIN;
         for (name, (disc, format)) in &self.variants {
             let mut builder = DeserializerBuilder::new(&mut dataframe_builder);
             format.to_fast(&mut builder, name);
             let fast_format = builder.finish();
             smallest = smallest.min(fast_format.size).max(1);
+            largest = largest.max(fast_format.size);
             variants.insert(*disc, (name.clone(), fast_format));
         }
         let mut dataframe;
@@ -127,6 +129,7 @@ impl LogFormat {
         let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
 
         let result: io::Result<()> = try_catch!({
+            let mut read_buf = vec![0u8; largest].into_boxed_slice();
             loop {
                 let row_idx = dataframe.add_null_row();
                 let mut row = dataframe.row_mut(row_idx);
@@ -140,7 +143,9 @@ impl LogFormat {
                 row.set_col(0, Data::Str(name));
                 row.set_col(1, Data::Integer(timestamp_ms as i32));
 
-                fast_format.parse(file, &mut row)?;
+                file.read_exact(&mut read_buf[..fast_format.size])?;
+
+                fast_format.parse(&read_buf[..fast_format.size], &mut row);
                 row_numbers.push(i);
                 offset += fast_format.size as u64;
                 i += 1;
