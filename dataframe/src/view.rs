@@ -51,8 +51,8 @@ impl DataFrameView {
         let mut row_buf = String::new();
         offset += file.read_line(&mut row_buf)?;
         if row_buf.is_empty() {
-            for col_name in header.trim_end_matches('\n').split(',') {
-                dataframe_builder.add_column(col_name, DataType::Intern);
+            for col_name in header.trim().split(',') {
+                dataframe_builder.add_column(col_name.trim(), DataType::Intern);
             }
             let df = dataframe_builder.build();
             return Ok(DataFrameView {
@@ -61,7 +61,10 @@ impl DataFrameView {
             });
         }
 
-        for (col_name, item) in header.trim_end_matches('\n').split(',').zip(row_buf.trim_end_matches('\n').split(',')) {
+        for (col_name, item) in header.trim().split(',').zip(row_buf.trim().split(',')) {
+            let item = item.trim();
+            let col_name = col_name.trim();
+
             if let Ok(_) = item.parse::<f32>() {
                 dataframe_builder.add_column(col_name, DataType::Float);
                 data_types.push(DataType::Float);
@@ -72,8 +75,8 @@ impl DataFrameView {
         }
         let mut df = dataframe_builder.build();
         let mut row_data = vec![];
-        for (ty, item) in data_types.iter().zip(row_buf.trim_end_matches('\n').split(',')) {
-            row_data.push(ty.parse_str(item));
+        for (ty, item) in data_types.iter().zip(row_buf.trim().split(',')) {
+            row_data.push(ty.parse_str(item.trim()));
         }
         if row_data.len() != df.shape().cols {
             return Err(io::Error::other("Malformed CSV file."));

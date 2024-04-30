@@ -17,7 +17,7 @@ use egui_plot as plot;
 use eframe::{Frame, Storage};
 // use egui_extras::image;
 
-use dataframe::{DataFrameView};
+use dataframe::{Data, DataFrameView};
 
 use crate::import::ImportTab;
 use crate::process::ProcessTab;
@@ -285,8 +285,8 @@ impl eframe::App for App {
                             let modulus = (total_rows / required_rows).max(1);
                             let mut points: Vec<[f64; 2]> = Vec::with_capacity(required_rows);
                             points.extend((0..data.shape().rows).step_by(modulus).filter_map(|row_idx| {
-                                let x_point = x_data.as_ref().map_or(Data::Integer(row_idx as i64), |x_data| x_data.get_row_data(row_idx));
-                                let y_point = y_data.as_ref().map_or(Data::Integer(row_idx as i64), |y_data| y_data.get_row_data(row_idx));
+                                let x_point = x_data.as_ref().map_or(Data::Integer(row_idx as i32), |x_data| x_data.get_row(row_idx));
+                                let y_point = y_data.as_ref().map_or(Data::Integer(row_idx as i32), |y_data| y_data.get_row(row_idx));
                                 // let (x_point, y_point) = (x_data.get_row(row_idx), y_data.get_row(row_idx));
                                 if let (Some(x), Some(y)) = (x_point.as_float(), y_point.as_float()) {
                                     Some([x as f64, y as f64])
