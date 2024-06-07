@@ -96,7 +96,7 @@ impl DataFrameView {
             }
             offset += amount;
             for (dtype, item) in data_types.iter().zip(row_buf.trim_end_matches('\n').split(',')) {
-                row_data.push(dtype.parse_str(item));
+                row_data.push(dtype.parse_str(item.trim()));
             }
             if row_data.len() != df.shape().cols {
                 return Err(io::Error::other("Malformed CSV file."));
