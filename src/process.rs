@@ -253,7 +253,7 @@ impl ProcessTab {
                                                 ui.label("Where");
 
                                                 egui::ComboBox::from_id_source(format!("combo-where-{id}"))
-                                                    .wrap(true)
+                                                    .wrap()
                                                     .show_index(ui, col_idx, shared.complete_data.shape().cols, |idx| shared.complete_data.col_name(idx));
                                             });
 
@@ -271,7 +271,7 @@ impl ProcessTab {
                                                 ui.label("Where");
 
                                                 egui::ComboBox::from_id_source(format!("combo-within-{id}"))
-                                                    .wrap(true)
+                                                    .wrap()
                                                     .show_index(ui, col_idx, shared.complete_data.shape().cols, |idx| shared.complete_data.col_name(idx));
                                             });
 
@@ -310,7 +310,7 @@ impl ProcessTab {
                                         Step::Decimate(_, factor) => {
                                             ui.horizontal(|ui| {
                                                 ui.label("Factor");
-                                                ui.add(egui::DragValue::new(factor).clamp_range(1..=50000))
+                                                ui.add(egui::DragValue::new(factor).range(1..=50000))
                                             });
                                         }
                                     }

@@ -254,7 +254,7 @@ impl eframe::App for App {
                                 .header(28.0, |mut row| {
                                     for col_name in data.col_names() {
                                         row.col(|ui| {
-                                            egui::Label::new(RichText::new(col_name).family(FontFamily::Monospace).size(18.0)).truncate(true).ui(ui);
+                                            egui::Label::new(RichText::new(col_name).family(FontFamily::Monospace).size(18.0)).truncate().ui(ui);
                                         });
                                     }
                                 })
@@ -265,7 +265,7 @@ impl eframe::App for App {
                                         for item in data_row {
                                             row.col(|ui| {
                                                 let text = item.to_string();
-                                                ui.add(egui::Label::new(RichText::new(&text).size(15.0)).truncate(true));
+                                                ui.add(egui::Label::new(RichText::new(&text).size(15.0)).truncate());
                                             });
                                         }
                                     });
@@ -410,5 +410,5 @@ fn main() -> eframe::Result<()> {
         viewport,
         ..Default::default()
     };
-    eframe::run_native("MIDAS Launch", options, Box::new(|cc| Box::new(App::new(cc))))
+    eframe::run_native("MIDAS Launch", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
 }
