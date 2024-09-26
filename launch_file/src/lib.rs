@@ -14,7 +14,7 @@ use serde::Deserialize;
 use byteorder::{LittleEndian, ReadBytesExt};
 use directories::ProjectDirs;
 
-use dataframe::{Data, DataFrameBuilder, DataFrameView, DataType};
+use dataframe::{Data, DataFrame, DataFrameBuilder, DataFrameView, DataType};
 
 use crate::deserialize::{SerializedCpp, Deserializer, DeserializerBuilder};
 
@@ -97,7 +97,97 @@ impl LogFormat {
         Ok(format)
     }
 
-    pub fn read_file(&self, file: &mut impl Read, file_size: Option<u64>, mut on_row_callback: impl FnMut(u64)) -> io::Result<DataFrameView> {
+    pub fn reader(&self, total_file_size: Option<u64>) -> LaunchFileReader {
+        LaunchFileReader::new(self, total_file_size)
+    }
+
+    // pub fn read_file(&self, file: &mut impl Read, file_size: Option<u64>, mut on_row_callback: impl FnMut(u64)) -> io::Result<DataFrameView> {
+    //     let mut dataframe_builder = DataFrameBuilder::new();
+    //     dataframe_builder.add_column("sensor", DataType::Intern);
+    //     dataframe_builder.add_column("timestamp", DataType::Integer);
+    //
+    //     let mut variants: AHashMap<u32, (NonZeroU32, Deserializer)> = AHashMap::new();
+    //     let mut smallest = usize::MAX;
+    //     let mut largest = usize::MIN;
+    //     for (name, (disc, format)) in &self.variants {
+    //         let mut builder = DeserializerBuilder::new(&mut dataframe_builder);
+    //         format.to_fast(&mut builder, name);
+    //         let fast_format = builder.finish();
+    //         smallest = smallest.min(fast_format.size).max(1);
+    //         largest = largest.max(fast_format.size);
+    //
+    //         let key = dataframe_builder.add_interned_string(name);
+    //         variants.insert(*disc, (key, fast_format));
+    //     }
+    //     let mut dataframe;
+    //     let mut row_numbers = Vec::new();
+    //     if let Some(file_size) = file_size {
+    //         let rows = (file_size / (smallest as u64 + 8)) as usize;
+    //         dataframe = dataframe_builder.build_with_capacity(rows);
+    //         row_numbers.reserve(rows);
+    //     } else {
+    //         dataframe = dataframe_builder.build();
+    //     }
+    //
+    //     let mut offset: u64 = 0;
+    //     let mut i = 0;
+    //
+    //     let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
+    //
+    //     let result: io::Result<()> = try_catch!({
+    //         let mut read_buf = vec![0u8; largest].into_boxed_slice();
+    //         loop {
+    //             let row_idx = dataframe.add_null_row();
+    //             let mut row = dataframe.row_mut(row_idx);
+    //
+    //             let determinant = file.read_u32::<LittleEndian>()?; offset += 4;
+    //             let timestamp_ms = file.read_u32::<LittleEndian>()?; offset += 4;
+    //
+    //             let (key, fast_format) = variants.get(&determinant)
+    //                 .ok_or_else(|| io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 8)))?;
+    //
+    //             row.set_col_raw(0, Some(*key));
+    //             // row.set_col_with_ty(0, DataType::Intern, Data::Str(name));
+    //             row.set_col_with_ty(1, DataType::Integer, Data::Integer(timestamp_ms as i32));
+    //
+    //             file.read_exact(&mut read_buf[..fast_format.size])?;
+    //
+    //             fast_format.parse(&read_buf[..fast_format.size], &mut row);
+    //             row_numbers.push(i);
+    //             offset += fast_format.size as u64;
+    //             i += 1;
+    //
+    //             on_row_callback(offset);
+    //         }
+    //     });
+    //     let result = result.unwrap_err();
+    //
+    //     dataframe.hint_complete();
+    //
+    //     if result.kind() == io::ErrorKind::UnexpectedEof {
+    //         Ok(DataFrameView {
+    //             rows: row_numbers,
+    //             df: Arc::new(dataframe)
+    //         })
+    //     } else {
+    //         Err(result)
+    //     }
+    // }
+}
+
+
+pub struct LaunchFileReader<'f> {
+    format: &'f LogFormat,
+    dataframe: DataFrame,
+    row_numbers: Vec<usize>,
+    smallest: usize,
+    largest: usize,
+    variants: AHashMap<u32, (NonZeroU32, Deserializer)>
+}
+
+
+impl<'f> LaunchFileReader<'f> {
+    fn new(format: &'f LogFormat, total_file_size: Option<u64>) -> Self {
         let mut dataframe_builder = DataFrameBuilder::new();
         dataframe_builder.add_column("sensor", DataType::Intern);
         dataframe_builder.add_column("timestamp", DataType::Integer);
@@ -105,7 +195,7 @@ impl LogFormat {
         let mut variants: AHashMap<u32, (NonZeroU32, Deserializer)> = AHashMap::new();
         let mut smallest = usize::MAX;
         let mut largest = usize::MIN;
-        for (name, (disc, format)) in &self.variants {
+        for (name, (disc, format)) in &format.variants {
             let mut builder = DeserializerBuilder::new(&mut dataframe_builder);
             format.to_fast(&mut builder, name);
             let fast_format = builder.finish();
@@ -117,29 +207,46 @@ impl LogFormat {
         }
         let mut dataframe;
         let mut row_numbers = Vec::new();
-        if let Some(file_size) = file_size {
-            let rows = (file_size / (smallest as u64 + 8)) as usize;
+
+        if let Some(file_size) = total_file_size {
+            let rows = file_size.div_ceil(smallest as u64 + 8) as usize;
             dataframe = dataframe_builder.build_with_capacity(rows);
             row_numbers.reserve(rows);
         } else {
             dataframe = dataframe_builder.build();
         }
+        LaunchFileReader {
+            format,
+            dataframe,
+            row_numbers,
+            smallest,
+            largest,
+            variants
+        }
+    }
+
+    pub fn read_file(&mut self, file: &mut impl Read, mut on_row_callback: impl FnMut(u64)) -> io::Result<u64> {
+        // todo
+        // if let Some(file_size) = file_size {
+        //     let maximum_needed_rows = file_size.div_ceil(self.smallest as u64 + 8);
+        //     self.dataframe.hint_rows()
+        // }
 
         let mut offset: u64 = 0;
-        let mut i = 0;
+        let mut added_rows = 0;
 
         let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
 
         let result: io::Result<()> = try_catch!({
-            let mut read_buf = vec![0u8; largest].into_boxed_slice();
+            let mut read_buf = vec![0u8; self.largest].into_boxed_slice();
             loop {
-                let row_idx = dataframe.add_null_row();
-                let mut row = dataframe.row_mut(row_idx);
+                let row_idx = self.dataframe.add_null_row();
+                let mut row = self.dataframe.row_mut(row_idx);
 
                 let determinant = file.read_u32::<LittleEndian>()?; offset += 4;
                 let timestamp_ms = file.read_u32::<LittleEndian>()?; offset += 4;
 
-                let (key, fast_format) = variants.get(&determinant)
+                let (key, fast_format) = self.variants.get(&determinant)
                     .ok_or_else(|| io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 8)))?;
 
                 row.set_col_raw(0, Some(*key));
@@ -149,24 +256,27 @@ impl LogFormat {
                 file.read_exact(&mut read_buf[..fast_format.size])?;
 
                 fast_format.parse(&read_buf[..fast_format.size], &mut row);
-                row_numbers.push(i);
+                self.row_numbers.push(row_idx);
                 offset += fast_format.size as u64;
-                i += 1;
+                added_rows += 1;
 
                 on_row_callback(offset);
             }
         });
+
         let result = result.unwrap_err();
-
-        dataframe.hint_complete();
-
         if result.kind() == io::ErrorKind::UnexpectedEof {
-            Ok(DataFrameView {
-                rows: row_numbers,
-                df: Arc::new(dataframe)
-            })
+            Ok(added_rows)
         } else {
             Err(result)
+        }
+    }
+
+    pub fn finish(mut self) -> DataFrameView {
+        self.dataframe.hint_complete();
+        DataFrameView {
+            rows: self.row_numbers,
+            df: Arc::new(self.dataframe)
         }
     }
 }

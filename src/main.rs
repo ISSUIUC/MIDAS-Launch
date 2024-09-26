@@ -140,9 +140,9 @@ impl eframe::App for App {
         ctx.set_visuals(Visuals::light());
 
         egui::SidePanel::new(Side::Left, "left-panel")
-            .default_width(180.0)
+            // .default_width(180.0)
             .min_width(240.0)
-            .max_width(480.0)
+            .max_width(400.0)
             .show(ctx, |ui| {
                 ui.add_space(3.0);
                 ui.columns(3, |columns| {
@@ -395,7 +395,6 @@ impl<T> ProgressTask<T> where T: Send + 'static {
 
 
 fn main() -> eframe::Result<()> {
-    // let v = egui::include_image!("../iss-logo.png");
     let icon_img = image::load_from_memory_with_format(include_bytes!("../iss-logo.png"), image::ImageFormat::Png).unwrap().into_rgba8();
 
     let viewport = egui::ViewportBuilder::default()

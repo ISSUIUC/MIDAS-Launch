@@ -12,7 +12,7 @@ use dataframe::DataFrameView;
 
 use crate::DataShared;
 use crate::ProgressTask;
-use crate::file_picker::FilePicker;
+use crate::file_picker::{FilePicker, MultipleFilePicker, SelectedPath};
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 enum ImportFrom {
@@ -64,10 +64,7 @@ impl ImportTab {
 }
 
 struct ImportLaunchTab {
-    source_path: String,
-    inspect_source_task: Option<JoinHandle<Result<u32, String>>>,
-    inspected_checksum: Option<u32>,
-    inspect_message: Option<String>,
+    source_paths: Vec<SelectedPath>,
 
     format_path: String,
     python_command: String,
@@ -81,15 +78,17 @@ struct ImportLaunchTab {
 
 impl ImportLaunchTab {
     pub fn new(cc: &eframe::CreationContext) -> ImportLaunchTab {
-        let source_path = cc.storage.and_then(|storage| storage.get_string("import-source-path")).unwrap_or("".to_string());
+        let source_path = cc.storage.and_then(|storage| {
+            let stored = storage.get_string("import-source-paths")?;
+            let paths = ron::from_str::<'_, Vec<PathBuf>>(&stored).ok()?;
+            let selected = paths.into_iter().map(SelectedPath::from_path).collect();
+            Some(selected)
+        }).unwrap_or(Vec::new());
         let format_path = cc.storage.and_then(|storage| storage.get_string("import-format-path")).unwrap_or("".to_string());
         let python_command = cc.storage.and_then(|storage| storage.get_string("import-python-command")).unwrap_or("python".to_string());
 
         ImportLaunchTab {
-            source_path,
-            inspect_source_task: None,
-            inspected_checksum: None,
-            inspect_message: None,
+            source_paths: source_path,
 
             format_path,
             python_command,
@@ -103,53 +102,17 @@ impl ImportLaunchTab {
     }
 
     pub fn save(&self, storage: &mut dyn Storage) {
-        storage.set_string("import-source-path", self.source_path.clone());
+        storage.set_string("import-source-paths", ron::to_string(&self.source_paths.iter().map(|path| path.path.clone()).collect::<Vec<_>>()).unwrap());
         storage.set_string("import-format-path", self.format_path.clone());
         storage.set_string("import-python-command", self.python_command.clone());
     }
 
     pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
-        let data_file_header = self.inspected_checksum.map_or("Data File".to_string(), |c| format!("Data File - 0x{:0>8x}", c));
-        egui::CollapsingHeader::new(data_file_header).id_source("data-file-header").default_open(true).show(ui, |ui| {
-            ui.add(FilePicker::new("data-file-picker", &mut self.source_path)
+        egui::CollapsingHeader::new("Data File".to_string()).id_source("data-file-header").default_open(true).show(ui, |ui| {
+            ui.add(MultipleFilePicker::new("data-file-picker", &mut self.source_paths)
                 .dialog_title("Data File")
                 .add_filter("Launch", &["launch"])
             );
-
-            ui.horizontal(|ui| {
-                if let Some(task) = &self.inspect_source_task {
-                    if task.is_finished() {
-                        let result = self.inspect_source_task.take().unwrap().join().unwrap();
-                        match result {
-                            Ok(checksum) => { self.inspected_checksum = Some(checksum); }
-                            Err(msg) => { self.inspect_message = Some(msg); }
-                        }
-                        ui.ctx().request_repaint();
-                    }
-                };
-
-                if self.inspect_source_task.is_none() {
-                    let response  = ui.add_enabled(!self.source_path.is_empty(), egui::Button::new("Inspect Source"))
-                        .on_disabled_hover_text("Choose source file");
-                    if response.clicked() {
-                        let path = PathBuf::from(self.source_path.clone());
-
-                        self.inspect_message = None;
-                        self.inspect_source_task = Some(std::thread::spawn(move || {
-                            let mut file = File::open(&path).map_err(|_| "Could not open file.".to_string())?;
-                            let mut buf = [0; 4];
-                            file.read_exact(&mut buf).map_err(|_| "Could not read from file.".to_string())?;
-                            Ok(u32::from_le_bytes(buf))
-                        }));
-                    }
-                } else {
-                    ui.add_enabled(false, egui::Button::new("Inspecting Source"));
-                }
-
-                if let Some(msg) = &self.inspect_message {
-                    ui.colored_label(Color32::RED, "!").on_hover_text(msg);
-                }
-            });
         });
 
         let data_format_header = self.loaded_format.as_ref().map_or("Data Format".to_string(), |f| format!("Data Format - 0x{:0>8x}", f.checksum));
@@ -229,22 +192,48 @@ impl ImportLaunchTab {
 
                 ui.add(egui::ProgressBar::new(task.progress()).show_percentage());
             } else {
-                if let (Some(loaded_format), true) = (&self.loaded_format, !self.source_path.is_empty()) {
+                if let (Some(loaded_format), true) = (&self.loaded_format, !self.source_paths.is_empty()) {
                     let response = ui.add_enabled(true, egui::Button::new("Load Data"));
 
                     if response.clicked() {
                         self.parsing_message = None;
                         shared.take();
                         let format = loaded_format.clone();
-                        let source_path = self.source_path.clone();
+                        let source_paths: Vec<PathBuf> = self.source_paths.iter().map(|path| path.path.clone()).collect();
 
                         self.parsing = Some(ProgressTask::new(ui.ctx(), move |progress| {
-                            let mut file = BufReader::new(File::open(source_path)?);
-                            let size: u64 = file.get_ref().metadata().map_or(0, |m| m.len());
+                            let mut file_sizes = vec![None; source_paths.len()];
+                            let mut total_file_size = 0;
+                            for (i, source_path) in source_paths.iter().enumerate() {
+                                if let Ok(metadata) = std::fs::metadata(source_path) {
+                                    file_sizes[i] = Some(metadata.len());
+                                    total_file_size += metadata.len();
+                                }
+                            }
 
-                            format.read_file(&mut file, Some(size), |offset| {
-                                progress.set(offset as f32 / size as f32);
-                            })
+                            let mut reader = format.reader(Some(total_file_size));
+
+                            let mut current_offset = 0;
+                            for (i, source_path) in source_paths.iter().enumerate() {
+                                let mut file = BufReader::new(File::open(source_path)?);
+
+                                if let Some(file_size) = file_sizes[i] {
+                                    reader.read_file(&mut file, |offset| {
+                                        progress.set((offset + current_offset) as f32 / total_file_size as f32);
+                                    })?;
+                                    current_offset += file_size;
+                                } else {
+                                    let mut this_file_size = 0;
+                                    reader.read_file(&mut file, |offset| {
+                                        progress.set((offset + current_offset) as f32 / (total_file_size + offset) as f32);
+                                        this_file_size = offset;
+                                    })?;
+                                    total_file_size += this_file_size;
+                                    current_offset + this_file_size;
+                                }
+                            }
+
+                            Ok(reader.finish())
                         }));
                     }
                 } else {

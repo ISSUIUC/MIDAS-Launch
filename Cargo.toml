@@ -24,4 +24,5 @@ egui_plot = { version = "0.28.1" }
 eframe = { version = "0.28.1", features = ["default_fonts", "glow", "wayland", "x11", "persistence"], default-features = false }
 image = { version = "0.25.2", features = ["png"], default-features = false }
 rfd = "0.15.0"
+ron = "0.8.1"
 futures-lite = { version = "2.3.0" }

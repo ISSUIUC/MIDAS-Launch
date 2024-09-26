@@ -24,7 +24,6 @@ impl<'v> ColumnView<'v> {
 #[derive(Clone)]
 pub struct DataFrameView {
     pub rows: Vec<usize>,
-    // pub df: Arc<DataFrame>
     pub df: Arc<DataFrame>
 }
 
