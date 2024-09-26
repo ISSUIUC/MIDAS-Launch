@@ -187,7 +187,7 @@ impl DataType {
     }
 
     fn convert_integer(bits: NonZeroU32) -> i32 {
-        (!bits.get() as i32).wrapping_add(2)
+        (bits.get() as i32).wrapping_sub(i32::MIN)
     }
 
     fn convert_float(bits: NonZeroU32) -> f32 {
@@ -199,7 +199,7 @@ impl DataType {
     }
 
     pub fn unconvert_integer(num: i32) -> u32 {
-        (!num as u32).wrapping_add(2)
+        (num as u32).wrapping_add_signed(i32::MIN)
     }
 
     fn unconvert_float(num: f32) -> u32 {

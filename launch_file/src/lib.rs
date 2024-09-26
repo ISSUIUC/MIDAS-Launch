@@ -180,6 +180,7 @@ pub struct LaunchFileReader<'f> {
     format: &'f LogFormat,
     dataframe: DataFrame,
     row_numbers: Vec<usize>,
+    file_number: i32,
     smallest: usize,
     largest: usize,
     variants: AHashMap<u32, (NonZeroU32, Deserializer)>
@@ -190,6 +191,7 @@ impl<'f> LaunchFileReader<'f> {
     fn new(format: &'f LogFormat, total_file_size: Option<u64>) -> Self {
         let mut dataframe_builder = DataFrameBuilder::new();
         dataframe_builder.add_column("sensor", DataType::Intern);
+        dataframe_builder.add_column("file number", DataType::Integer);
         dataframe_builder.add_column("timestamp", DataType::Integer);
 
         let mut variants: AHashMap<u32, (NonZeroU32, Deserializer)> = AHashMap::new();
@@ -219,6 +221,7 @@ impl<'f> LaunchFileReader<'f> {
             format,
             dataframe,
             row_numbers,
+            file_number: 0,
             smallest,
             largest,
             variants
@@ -234,6 +237,7 @@ impl<'f> LaunchFileReader<'f> {
 
         let mut offset: u64 = 0;
         let mut added_rows = 0;
+        self.file_number += 1;
 
         let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
 
@@ -250,8 +254,8 @@ impl<'f> LaunchFileReader<'f> {
                     .ok_or_else(|| io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 8)))?;
 
                 row.set_col_raw(0, Some(*key));
-                // row.set_col_with_ty(0, DataType::Intern, Data::Str(name));
-                row.set_col_with_ty(1, DataType::Integer, Data::Integer(timestamp_ms as i32));
+                row.set_col_with_ty(1, DataType::Integer, Data::Integer(self.file_number - 1));
+                row.set_col_with_ty(2, DataType::Integer, Data::Integer(timestamp_ms as i32));
 
                 file.read_exact(&mut read_buf[..fast_format.size])?;
 
