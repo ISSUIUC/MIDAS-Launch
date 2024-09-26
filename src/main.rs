@@ -15,7 +15,6 @@ use std::time::Duration;
 use egui::{Align, Context, FontFamily, Layout, panel::Side, RichText, Visuals, Widget};
 use egui_plot as plot;
 use eframe::{Frame, Storage};
-// use egui_extras::image;
 
 use dataframe::{DataFrameView, VirtualColumn};
 

@@ -14,7 +14,7 @@ If a new version of this software is available, you can update it by re-running 
 
 ## Usage
 The workflow for using this software can be divided into 4 steps:
-1. Load data from either a raw launch file or from a CSV.
+1. Load data from either a list of raw launch files or from a CSV.
 2. (Possibly) Apply processing steps and filters.
 3. View the data in a tabular or graphical form.
 4. (Possibly) Reexport the data to a CSV.
@@ -35,9 +35,10 @@ loaded into the table in a few seconds.
 Loading data from .launch files is much more complicated. To begin, select the 'Import' tab and select
 the source type of '.launch File'.
 
-First, click the 'Choose File' button under the 'Data File' header and choose the .launch file
-you want to load. The program will attempt to store the last file you loaded across runs, so
-if you're loading the same file again this step can be skipped.
+Click the 'Add Files' button under the 'Data File' header and choose the .launch files
+you want to load. The program will attempt to store the last set of files you loaded across runs, so
+if you're loading the same files again this step may be able to be skipped. The files you chose will be 
+stitched together in order, so you can use the arrow buttons to reorder the chosen files.
 
 Now, you have to tell the program the format that this .launch file was encoded in. This takes some 
 extra steps to set up:
@@ -61,7 +62,7 @@ command is for Python 2.7.
 
 Next, click the 'Load Format' button. If all goes well, this should parse the format and display the checksum
 of the format next to the 'Data Format' header. If you want to check that the launch data file
-was created by the same format, click the 'Inspect Source' button and verify that the checksum is the same.
+was created by the same format, verify that the checksum is the same as all the chosen source files.
 
 Now, you can click the 'Load Data' button. In a few seconds, this will have imported all the data
 from the launch file.

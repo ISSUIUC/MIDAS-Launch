@@ -194,6 +194,22 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                             file_picker_data.selection = None;
                         }
                     });
+
+                    ui.add_enabled_ui(file_picker_data.selection.is_some_and(|index| index < self.paths.len() - 1), |ui| {
+                        if ui.button("⬇").clicked() {
+                            let index = file_picker_data.selection.unwrap();
+                            self.paths.swap(index, index + 1);
+                            file_picker_data.selection = Some(index + 1);
+                        }
+                    });
+
+                    ui.add_enabled_ui(file_picker_data.selection.is_some_and(|index| index > 0), |ui| {
+                        if ui.button("⬆").clicked() {
+                            let index = file_picker_data.selection.unwrap();
+                            self.paths.swap(index, index - 1);
+                            file_picker_data.selection = Some(index - 1);
+                        }
+                    });
                 });
             });
             egui_extras::TableBuilder::new(ui)
@@ -260,22 +276,33 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                 }
             }
 
-            let choose_enabled = file_picker_data.file_dialog_handle.is_none();
-            if ui.add_enabled(choose_enabled, egui::Button::new("Add Files")).clicked() {
-                // todo self.async_file_dialog.set_directory(dir)
+            ui.add_space(6.0);
 
-                let ctx_clone = ui.ctx().clone();
-                let pick_task = self.async_file_dialog.pick_files();
+            ui.horizontal(|ui| {
+                let choose_enabled = file_picker_data.file_dialog_handle.is_none();
 
-                file_picker_data.file_dialog_handle = Some(thread::spawn(move || {
-                    let file_paths = block_on(pick_task)
-                        .map(|handles|
-                            handles.into_iter().map(|handle| SelectedPath::from_path(handle.path())).collect()
-                        );
-                    ctx_clone.request_repaint_after(Duration::from_millis(100));
-                    file_paths
-                }));
-            }
+                if ui.add_enabled(choose_enabled, egui::Button::new("Add Files")).clicked() {
+                    // todo self.async_file_dialog.set_directory(dir)
+
+                    let ctx_clone = ui.ctx().clone();
+                    let pick_task = self.async_file_dialog.pick_files();
+
+                    file_picker_data.file_dialog_handle = Some(thread::spawn(move || {
+                        let file_paths = block_on(pick_task)
+                            .map(|handles|
+                                handles.into_iter().map(|handle| SelectedPath::from_path(handle.path())).collect()
+                            );
+                        ctx_clone.request_repaint_after(Duration::from_millis(100));
+                        file_paths
+                    }));
+                }
+
+                if ui.add_enabled(choose_enabled, egui::Button::new("Clear Files")).clicked() {
+                    self.paths.clear();
+                    file_picker_data.selection = None;
+                }
+            });
+
         }).response
     }
 }
