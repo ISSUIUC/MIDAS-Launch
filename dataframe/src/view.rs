@@ -2,12 +2,13 @@ use std::{io, io::BufRead};
 use std::sync::Arc;
 
 use crate::data::{Data, DataType};
-use crate::frame::{DataFrame, DataFrameBuilder, Row, RowMut, Shape, Column};
+use crate::frame::{DataFrame, DataFrameBuilder, Row, RowMut, Shape, Column, VirtualColumn};
 
 
 pub struct ColumnView<'v> {
     rows: &'v Vec<usize>,
-    col: Column<'v>
+    col: Column<'v>,
+    virtual_column: VirtualColumn
 }
 
 impl<'v> ColumnView<'v> {
@@ -16,7 +17,10 @@ impl<'v> ColumnView<'v> {
     }
 
     pub fn get_row(&self, idx: usize) -> Data<'v> {
-        self.col.get_row(self.rows[idx])
+        match self.virtual_column {
+            VirtualColumn::RowIndex => Data::Integer(idx as i32),
+            VirtualColumn::Column(_) => self.col.get_row(self.rows[idx])
+        }
     }
 }
 
@@ -116,15 +120,28 @@ impl DataFrameView {
         self.df.col_names()
     }
 
-    pub fn col_name(&self, idx: usize) -> &str {
+    pub fn col_name(&self, idx: VirtualColumn) -> &str {
         self.df.col(idx).name()
     }
 
-    pub fn col(&self, idx: usize) -> ColumnView {
-        ColumnView {
-            rows: &self.rows,
-            col: self.df.col(idx)
+    pub fn col(&self, idx: VirtualColumn) -> ColumnView {
+        match idx {
+            VirtualColumn::RowIndex => {
+                ColumnView {
+                    rows: &self.rows,
+                    col: self.df.col(idx),
+                    virtual_column: idx
+                }
+            }
+            VirtualColumn::Column(idx) => {
+                ColumnView {
+                    rows: &self.rows,
+                    col: self.df.col(VirtualColumn::Column(idx)),
+                    virtual_column: VirtualColumn::Column(idx)
+                }
+            }
         }
+
     }
 
     pub fn row(&self, idx: usize) -> Row {
@@ -144,7 +161,7 @@ impl DataFrameView {
     //     // self.df.row_iter(self.rows[index])
     // }
 
-    pub fn get_by_index(&self, col: usize, row: usize) -> Data {
+    pub fn get_by_index(&self, col: VirtualColumn, row: usize) -> Data {
         self.df.row(self.rows[row]).get_col(col)
     }
 
@@ -152,7 +169,7 @@ impl DataFrameView {
         Arc::make_mut(&mut self.df).row_mut(self.rows[row]).set_col(col, data)
     }
 
-    pub fn filter_by(&mut self, col: usize, mut f: impl FnMut(usize, &Data) -> bool) {
+    pub fn filter_by(&mut self, col: VirtualColumn, mut f: impl FnMut(usize, &Data) -> bool) {
         let indices = {
             let col = self.col(col);
             let mut indices = vec![];
@@ -168,14 +185,14 @@ impl DataFrameView {
         self.rows = indices;
     }
 
-    pub fn sort_by_asc(&mut self, col: usize) {
+    pub fn sort_by_asc(&mut self, col: VirtualColumn) {
         let mut rows_sorted = self.rows.clone();
         let col = &self.df.col(col);
         rows_sorted.sort_by(|&a_idx, &b_idx| col.compare(a_idx, b_idx));
         self.rows = rows_sorted;
     }
 
-    pub fn sort_by_desc(&mut self, col: usize) {
+    pub fn sort_by_desc(&mut self, col: VirtualColumn) {
         let mut rows_sorted = self.rows.clone();
         let col = &self.df.col(col);
         rows_sorted.sort_by(|a_idx, b_idx| col.compare(*a_idx, *b_idx).reverse());

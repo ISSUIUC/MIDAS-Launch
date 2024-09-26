@@ -17,7 +17,7 @@ use egui_plot as plot;
 use eframe::{Frame, Storage};
 // use egui_extras::image;
 
-use dataframe::{Data, DataFrameView};
+use dataframe::{Data, DataFrameView, VirtualColumn};
 
 use crate::import::ImportTab;
 use crate::process::ProcessTab;
@@ -45,11 +45,11 @@ struct TableTab {
 struct PlotTab {
     // plots: Option<PlotInfo>,
 
-    x_idx: Option<usize>,
-    y_idx: Option<usize>,
+    x_idx: VirtualColumn,
+    y_idx: VirtualColumn,
     resolution: f64,
 
-    cache: Option<((u64, Option<usize>, Option<usize>, f64), Vec<[f64; 2]>)>
+    cache: Option<((u64, VirtualColumn, VirtualColumn, f64), Vec<[f64; 2]>)>
 }
 
 impl TableTab {
@@ -64,8 +64,8 @@ impl TableTab {
 impl PlotTab {
     fn new(_cc: &eframe::CreationContext) -> PlotTab {
         PlotTab {
-            x_idx: None,
-            y_idx: None,
+            x_idx: VirtualColumn::RowIndex,
+            y_idx: VirtualColumn::RowIndex,
             resolution: 4.0,
 
             cache: None
@@ -201,20 +201,20 @@ impl eframe::App for App {
                             egui::Frame::group(ui.style())
                                 .show(ui, |ui| {
                                     egui::ComboBox::new("x-axis-combo","X axis")
-                                        .selected_text(self.plot_tab.x_idx.map_or("<row number>", |n| shared.shown_data.col_name(n)))
+                                        .selected_text(shared.shown_data.col_name(self.plot_tab.x_idx))
                                         .show_ui(ui, |ui| {
-                                            ui.selectable_value(&mut self.plot_tab.x_idx, None, "<row number>");
+                                            ui.selectable_value(&mut self.plot_tab.x_idx, VirtualColumn::RowIndex, "<row number>");
                                             for (idx, col_name) in shared.shown_data.col_names().enumerate() {
-                                                ui.selectable_value(&mut self.plot_tab.x_idx, Some(idx), col_name);
+                                                ui.selectable_value(&mut self.plot_tab.x_idx, VirtualColumn::Column(idx), col_name);
                                             }
                                         });
 
                                     egui::ComboBox::new("y-axis-combo","Y axis")
-                                        .selected_text(self.plot_tab.y_idx.map_or("<row number>", |n| shared.shown_data.col_name(n)))
+                                        .selected_text(shared.shown_data.col_name(self.plot_tab.y_idx))
                                         .show_ui(ui, |ui| {
-                                            ui.selectable_value(&mut self.plot_tab.y_idx, None, "<row number>");
+                                            ui.selectable_value(&mut self.plot_tab.y_idx, VirtualColumn::RowIndex, "<row number>");
                                             for (idx, col_name) in shared.shown_data.col_names().enumerate() {
-                                                ui.selectable_value(&mut self.plot_tab.y_idx, Some(idx), col_name);
+                                                ui.selectable_value(&mut self.plot_tab.y_idx, VirtualColumn::Column(idx), col_name);
                                             }
                                         });
 
@@ -275,8 +275,8 @@ impl eframe::App for App {
                     VisualState::Plot => {
                         let data = &data_shared.shown_data;
 
-                        let x_data = self.plot_tab.x_idx.map(|idx| data.col(idx));
-                        let y_data = self.plot_tab.y_idx.map(|idx| data.col(idx));
+                        let x_data = data.col(self.plot_tab.x_idx);
+                        let y_data = data.col(self.plot_tab.y_idx);
 
                         let key = (data_shared.version, self.plot_tab.x_idx, self.plot_tab.y_idx, self.plot_tab.resolution);
                         if !self.plot_tab.cache.as_ref().is_some_and(|(cached_key, _)| cached_key == &key) {
@@ -285,8 +285,8 @@ impl eframe::App for App {
                             let modulus = (total_rows / required_rows).max(1);
                             let mut points: Vec<[f64; 2]> = Vec::with_capacity(required_rows);
                             points.extend((0..data.shape().rows).step_by(modulus).filter_map(|row_idx| {
-                                let x_point = x_data.as_ref().map_or(Data::Integer(row_idx as i32), |x_data| x_data.get_row(row_idx));
-                                let y_point = y_data.as_ref().map_or(Data::Integer(row_idx as i32), |y_data| y_data.get_row(row_idx));
+                                let x_point = x_data.get_row(row_idx);
+                                let y_point = y_data.get_row(row_idx);
                                 // let (x_point, y_point) = (x_data.get_row(row_idx), y_data.get_row(row_idx));
                                 if let (Some(x), Some(y)) = (x_point.as_float(), y_point.as_float()) {
                                     Some([x as f64, y as f64])
@@ -302,8 +302,8 @@ impl eframe::App for App {
 
                         plot::Plot::new("plot")
                             .allow_drag(false)
-                            .x_axis_label(x_data.as_ref().map_or("<row number>", |x_data| x_data.name()))
-                            .y_axis_label(y_data.as_ref().map_or("<row number>", |x_data| x_data.name()))
+                            .x_axis_label(x_data.name())
+                            .y_axis_label(y_data.name())
                             .show(ui, |plot_ui| {
                                 plot_ui.line(line);
                             });

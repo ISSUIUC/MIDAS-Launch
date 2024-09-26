@@ -1,15 +1,16 @@
+use std::hash::Hash;
 use std::num::NonZeroU32;
 use std::ops::Bound;
 
 use egui::Ui;
 use eframe::Storage;
 
-use dataframe::DataFrameView;
+use dataframe::{DataFrameView, VirtualColumn};
 
 use crate::DataShared;
 use crate::{ProgressTask, Progress};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 enum StepType {
     Fill,
     ColEq,
@@ -32,9 +33,9 @@ impl StepType {
     fn to_step(&self, id: u64) -> Step {
         match self {
             StepType::Fill => Step::Fill(id, true, true),
-            StepType::ColEq => Step::ColEq(id, 0, "".to_string()),
-            StepType::Within => Step::Within(id, 0, false, "".to_string(), false, "".to_string()),
-            StepType::Sort => Step::Sort(id, false, 0),
+            StepType::ColEq => Step::ColEq(id, VirtualColumn::RowIndex, "".to_string()),
+            StepType::Within => Step::Within(id, VirtualColumn::RowIndex, false, "".to_string(), false, "".to_string()),
+            StepType::Sort => Step::Sort(id, false, VirtualColumn::RowIndex),
             StepType::Decimate => Step::Decimate(id, 2)
         }
     }
@@ -43,9 +44,9 @@ impl StepType {
 #[derive(Clone)]
 enum Step {
     Fill(u64, bool, bool),
-    ColEq(u64, usize, String),
-    Within(u64, usize, bool, String, bool, String),
-    Sort(u64, bool, usize),
+    ColEq(u64, VirtualColumn, String),
+    Within(u64, VirtualColumn, bool, String, bool, String),
+    Sort(u64, bool, VirtualColumn),
     Decimate(u64, usize),
 }
 
@@ -99,7 +100,7 @@ impl Step {
                     let mut row = df.row_mut(row_idx);
 
                     for (i, prev_value) in prev_values.iter_mut().enumerate() {
-                        if let Some(value) = row.get_col_raw(i) {
+                        if let Some(value) = row.get_col_raw(VirtualColumn::Column(i)) {
                             *prev_value = Some(value);
                         } else {
                             row.set_col_raw(i, *prev_value);
@@ -162,7 +163,7 @@ impl Step {
                 let rows = df.shape().rows as f32;
 
                 progress.set(0.0);
-                df.filter_by(0, |i, _| {
+                df.filter_by(VirtualColumn::RowIndex, |i, _| {
                     if i % 3000 == 0 {
                         progress.set(i as f32 / rows);
                     }
@@ -174,6 +175,18 @@ impl Step {
             }
         }
     }
+}
+
+pub fn column_select_combobox(ui: &mut Ui, id: impl Hash, selected_column: &mut VirtualColumn, df: &DataFrameView) {
+    egui::ComboBox::from_id_source(id)
+        .wrap()
+        .selected_text(df.col_name(*selected_column))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(selected_column, VirtualColumn::RowIndex, "<row index>");
+            for column_index in 0..df.shape().cols {
+                ui.selectable_value(selected_column, VirtualColumn::Column(column_index), df.col_name(VirtualColumn::Column(column_index)));
+            }
+        });
 }
 
 pub struct ProcessTab {
@@ -188,7 +201,7 @@ impl ProcessTab {
     pub fn new(_cc: &eframe::CreationContext) -> ProcessTab {
         ProcessTab {
             steps: vec![
-                Step::Sort(0, false, 1),
+                Step::Sort(0, false, VirtualColumn::Column(1)),
                 Step::Fill(1, true, true),
             ],
             step_id: 2,
@@ -252,9 +265,7 @@ impl ProcessTab {
                                             ui.horizontal(|ui| {
                                                 ui.label("Where");
 
-                                                egui::ComboBox::from_id_source(format!("combo-where-{id}"))
-                                                    .wrap()
-                                                    .show_index(ui, col_idx, shared.complete_data.shape().cols, |idx| shared.complete_data.col_name(idx));
+                                                column_select_combobox(ui, format!("combo-where-{id}"), col_idx, &shared.complete_data);
                                             });
 
                                             ui.horizontal(|ui| {
@@ -270,9 +281,7 @@ impl ProcessTab {
                                             ui.horizontal(|ui| {
                                                 ui.label("Where");
 
-                                                egui::ComboBox::from_id_source(format!("combo-within-{id}"))
-                                                    .wrap()
-                                                    .show_index(ui, col_idx, shared.complete_data.shape().cols, |idx| shared.complete_data.col_name(idx));
+                                                column_select_combobox(ui, format!("combo-within-{id}"), col_idx, &shared.complete_data);
                                             });
 
                                             ui.horizontal(|ui| {
@@ -303,8 +312,7 @@ impl ProcessTab {
                                             ui.horizontal(|ui| {
                                                 ui.label("By");
 
-                                                egui::ComboBox::from_id_source(format!("combo-by-{id}"))
-                                                    .show_index(ui, col_idx, shared.complete_data.shape().cols, |idx| shared.complete_data.col_name(idx));
+                                                column_select_combobox(ui, format!("combo-by-{id}"), col_idx, &shared.complete_data);
                                             });
                                         }
                                         Step::Decimate(_, factor) => {

@@ -1,7 +1,15 @@
 use std::cmp::Ordering;
 use std::num::NonZeroU32;
-
+use std::ptr::null;
 use crate::{data, data::{Data, DataType}};
+
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum VirtualColumn {
+    RowIndex,
+    Column(usize),
+}
+
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Shape {
@@ -93,20 +101,29 @@ impl DataFrameBuilder {
 }
 
 pub struct Row<'df> {
+    row_index: usize,
     mem: &'df [u32],
     header: &'df Header,
     ctx: &'df data::Context
 }
 
 impl<'df> Row<'df> {
-    pub fn get_col_raw(&self, idx: usize) -> Option<NonZeroU32> {
-        NonZeroU32::new(self.mem[idx])
+    pub fn get_col_raw(&self, idx: VirtualColumn) -> Option<NonZeroU32> {
+        match idx {
+            VirtualColumn::RowIndex => NonZeroU32::new(DataType::unconvert_integer(self.row_index as i32)),
+            VirtualColumn::Column(idx) => NonZeroU32::new(self.mem[idx])
+        }
     }
 
-    pub fn get_col(&self, idx: usize) -> Data<'df> {
-        let value = self.mem[idx];
-        let ty = self.header.col_info(idx).ty;
-        ty.to_data(value, self.ctx)
+    pub fn get_col(&self, idx: VirtualColumn) -> Data<'df> {
+        match idx {
+            VirtualColumn::RowIndex => Data::Integer(self.row_index as i32),
+            VirtualColumn::Column(idx) => {
+                let value = self.mem[idx];
+                let ty = self.header.col_info(idx).ty;
+                ty.to_data(value, self.ctx)
+            }
+        }
     }
 
     pub fn raw_slice(&self) -> &[Option<NonZeroU32>] {
@@ -126,23 +143,33 @@ impl<'df> Row<'df> {
 }
 
 pub struct RowMut<'df> {
+    row_index: usize,
     mem: &'df mut [u32],
     header: &'df Header,
     ctx: &'df mut data::Context
 }
 
 impl<'df> RowMut<'df> {
-    pub fn get_col_raw(&self, idx: usize) -> Option<NonZeroU32> {
-        NonZeroU32::new(self.mem[idx])
+    pub fn get_col_raw(&self, idx: VirtualColumn) -> Option<NonZeroU32> {
+        match idx {
+            VirtualColumn::RowIndex => NonZeroU32::new(DataType::unconvert_integer(self.row_index as i32)),
+            VirtualColumn::Column(idx) => NonZeroU32::new(self.mem[idx])
+        }
     }
 
     pub fn set_col_raw(&mut self, idx: usize, value: Option<NonZeroU32>) {
         self.mem[idx] = unsafe { std::mem::transmute::<Option<NonZeroU32>, u32>(value) };
     }
 
-    pub fn get_col(&self, idx: usize) -> Data {
-        let value = self.mem[idx];
-        self.header.col_info(idx).ty.to_data(value, self.ctx)
+    pub fn get_col(&self, idx: VirtualColumn) -> Data {
+        match idx {
+            VirtualColumn::RowIndex => Data::Integer(self.row_index as i32),
+            VirtualColumn::Column(idx) => {
+                let value = self.mem[idx];
+                let ty = self.header.col_info(idx).ty;
+                ty.to_data(value, self.ctx)
+            }
+        }
     }
 
     pub fn set_col(&mut self, idx: usize, value: Data<'df>) {
@@ -161,7 +188,8 @@ pub struct Column<'df> {
     stride: usize,
     name: &'df str,
     ty: DataType,
-    ctx: &'df data::Context
+    ctx: &'df data::Context,
+    virtual_column: VirtualColumn
 }
 
 impl<'df> Column<'df> {
@@ -175,11 +203,17 @@ impl<'df> Column<'df> {
 
     pub fn get_row_raw(&self, idx: usize) -> u32 {
         debug_assert!(idx < self.len);
-        unsafe { self.mem.add(idx * self.stride).read() }
+        match self.virtual_column {
+            VirtualColumn::RowIndex => DataType::unconvert_integer(idx as i32),
+            VirtualColumn::Column(_) => unsafe { self.mem.add(idx * self.stride).read() },
+        }
     }
 
     pub fn get_row(&self, idx: usize) -> Data<'df> {
-        self.ty.to_data(self.get_row_raw(idx), self.ctx)
+        match self.virtual_column {
+            VirtualColumn::RowIndex => Data::Integer(idx as i32),
+            VirtualColumn::Column(_) => self.ty.to_data(self.get_row_raw(idx), self.ctx)
+        }
     }
 
     pub fn compare(&self, a: usize, b: usize) -> Ordering {
@@ -220,6 +254,7 @@ impl DataFrame {
         debug_assert!(index < self.rows);
         let start = self.header.num_cols() * index;
         Row {
+            row_index: index,
             mem: &self.mem[start..start+self.header.size()],
             header: &self.header,
             ctx: &self.context
@@ -230,33 +265,39 @@ impl DataFrame {
         debug_assert!(index < self.rows);
         let start = self.header.num_cols() * index;
         RowMut {
+            row_index: index,
             mem: &mut self.mem[start..start+self.header.size()],
             header: &self.header,
             ctx: &mut self.context
         }
     }
 
-    pub fn col(&self, index: usize) -> Column<'_> {
-        Column {
-            mem: &self.mem[index] as *const u32,
-            len: self.rows,
-            stride: self.header.size(),
-            ty: self.header.columns[index].ty,
-            ctx: &self.context,
-            name: &self.header.columns[index].name
+    pub fn col(&self, index: VirtualColumn) -> Column<'_> {
+        match index {
+            VirtualColumn::RowIndex => {
+                Column {
+                    mem: null(),
+                    len: self.rows,
+                    stride: 0,
+                    ty: DataType::Integer,
+                    ctx: &self.context,
+                    name: "<row index>",
+                    virtual_column: index
+                }
+            }
+            VirtualColumn::Column(index) => {
+                Column {
+                    mem: &self.mem[index] as *const u32,
+                    len: self.rows,
+                    stride: self.header.size(),
+                    ty: self.header.columns[index].ty,
+                    ctx: &self.context,
+                    name: &self.header.columns[index].name,
+                    virtual_column: VirtualColumn::Column(index)
+                }
+            }
         }
     }
-
-    // pub fn col_mut(&mut self, index: usize) -> ColumnStepsMut<'_> {
-    //     ColumnStepsMut {
-    //         mem: &mut self.mem[index] as *mut u32,
-    //         columns: self.layout.num_cols(),
-    //         rows: self.rows,
-    //         ty: self.layout.columns[index].ty,
-    //         ctx: &mut self.layout.context,
-    //         name: &self.layout.columns[index].name
-    //     }
-    // }
 
     pub fn add_null_row(&mut self) -> usize {
         if self.rows * self.header.size() < self.mem.len() {

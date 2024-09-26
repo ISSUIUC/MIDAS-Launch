@@ -4,4 +4,4 @@ mod frame;
 
 pub use view::{DataFrameView, ColumnView};
 pub use data::{Data, DataType};
-pub use frame::{Shape, DataFrame, DataFrameBuilder, Row, RowMut, ColumnInfo};
+pub use frame::{Shape, DataFrame, DataFrameBuilder, Row, RowMut, ColumnInfo, VirtualColumn};

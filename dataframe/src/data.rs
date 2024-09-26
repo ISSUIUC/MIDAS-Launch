@@ -198,7 +198,7 @@ impl DataType {
         ctx.resolve(bits).unwrap_or("<unknown>")
     }
 
-    fn unconvert_integer(num: i32) -> u32 {
+    pub fn unconvert_integer(num: i32) -> u32 {
         (!num as u32).wrapping_add(2)
     }
 
