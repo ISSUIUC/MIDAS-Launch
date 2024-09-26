@@ -17,7 +17,7 @@ use egui_plot as plot;
 use eframe::{Frame, Storage};
 // use egui_extras::image;
 
-use dataframe::{Data, DataFrameView, VirtualColumn};
+use dataframe::{DataFrameView, VirtualColumn};
 
 use crate::import::ImportTab;
 use crate::process::ProcessTab;

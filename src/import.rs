@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::{io, io::{BufReader, Read}};
+use std::{io, io::BufReader};
 use std::path::PathBuf;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -108,7 +108,7 @@ impl ImportLaunchTab {
     }
 
     pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
-        egui::CollapsingHeader::new("Data File".to_string()).id_source("data-file-header").default_open(true).show(ui, |ui| {
+        egui::CollapsingHeader::new("Data File".to_string()).id_salt("data-file-header").default_open(true).show(ui, |ui| {
             ui.add(MultipleFilePicker::new("data-file-picker", &mut self.source_paths)
                 .dialog_title("Data File")
                 .add_filter("Launch", &["launch"])
@@ -116,7 +116,7 @@ impl ImportLaunchTab {
         });
 
         let data_format_header = self.loaded_format.as_ref().map_or("Data Format".to_string(), |f| format!("Data Format - 0x{:0>8x}", f.checksum));
-        egui::CollapsingHeader::new(data_format_header).id_source("data-format-header").default_open(true).show(ui, |ui| {
+        egui::CollapsingHeader::new(data_format_header).id_salt("data-format-header").default_open(true).show(ui, |ui| {
             ui.add(FilePicker::new("data-format-picker", &mut self.format_path)
                 .dialog_title("Data Format")
                 .add_filter("C++ Header", &["h", "hpp"])
@@ -229,7 +229,7 @@ impl ImportLaunchTab {
                                         this_file_size = offset;
                                     })?;
                                     total_file_size += this_file_size;
-                                    current_offset + this_file_size;
+                                    current_offset += this_file_size;
                                 }
                             }
 

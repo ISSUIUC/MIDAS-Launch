@@ -178,7 +178,7 @@ impl Step {
 }
 
 pub fn column_select_combobox(ui: &mut Ui, id: impl Hash, selected_column: &mut VirtualColumn, df: &DataFrameView) {
-    egui::ComboBox::from_id_source(id)
+    egui::ComboBox::from_id_salt(id)
         .wrap()
         .selected_text(df.col_name(*selected_column))
         .show_ui(ui, |ui| {
@@ -301,7 +301,7 @@ impl ProcessTab {
                                         Step::Sort(id, is_desc, col_idx) => {
                                             ui.horizontal(|ui| {
                                                 ui.label("Sort");
-                                                egui::ComboBox::from_id_source(format!("combo-sort-{id}"))
+                                                egui::ComboBox::from_id_salt(format!("combo-sort-{id}"))
                                                     .selected_text(if *is_desc { "Descending" } else { "Ascending" })
                                                     .show_ui(ui, |ui| {
                                                         ui.selectable_value(is_desc, false, "Ascending");
@@ -331,7 +331,7 @@ impl ProcessTab {
                                 self.step_id +=1;
                             }
 
-                            egui::ComboBox::from_id_source("add-type")
+                            egui::ComboBox::from_id_salt("add-type")
                                 .selected_text(self.add_step_type.name())
                                 .show_ui(ui, |ui| {
                                     ui.selectable_value(&mut self.add_step_type, StepType::Fill, StepType::Fill.name());

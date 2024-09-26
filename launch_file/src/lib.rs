@@ -177,10 +177,12 @@ impl LogFormat {
 
 
 pub struct LaunchFileReader<'f> {
+    #[allow(dead_code)]
     format: &'f LogFormat,
     dataframe: DataFrame,
     row_numbers: Vec<usize>,
     file_number: i32,
+    #[allow(dead_code)]
     smallest: usize,
     largest: usize,
     variants: AHashMap<u32, (NonZeroU32, Deserializer)>
@@ -207,7 +209,7 @@ impl<'f> LaunchFileReader<'f> {
             let key = dataframe_builder.add_interned_string(name);
             variants.insert(*disc, (key, fast_format));
         }
-        let mut dataframe;
+        let dataframe;
         let mut row_numbers = Vec::new();
 
         if let Some(file_size) = total_file_size {
