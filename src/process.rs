@@ -75,6 +75,7 @@ impl Step {
         match self {
             &Step::Fill(_, _, and_before) => {
                 let shape = df.shape();
+                progress.set(0.0);
 
                 let mut prev_values: Vec<Option<NonZeroU32>> = vec![None; shape.cols];
                 if and_before {
@@ -109,6 +110,7 @@ impl Step {
 
                     progress.set(row_idx as f32 / shape.rows as f32);
                 }
+                progress.set(1.0);
 
                 df
             }
@@ -386,7 +388,7 @@ impl ProcessTab {
                             let mut data = old_data;
                             for (i, step) in steps.iter().enumerate() {
                                 progress.set_text(format!("Step {}/{}", i+1, steps.len()));
-                                progress.set(0.0);
+                                progress.reset_progress();
                                 data = step.apply(data, progress);
                             }
 

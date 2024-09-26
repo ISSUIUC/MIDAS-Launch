@@ -346,6 +346,11 @@ impl Progress {
         self.context.request_repaint_after(Duration::from_millis(16));
     }
 
+    fn reset_progress(&self) {
+        self.local_progress.set(0.0);
+        self.contents.0.store(0.0f32.to_bits(), Ordering::SeqCst);
+    }
+
     fn set(&self, amount: f32) {
         if (amount * 100.0).floor() > (self.local_progress.get() * 100.0).floor() {
             self.local_progress.set(amount);
