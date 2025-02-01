@@ -9,6 +9,7 @@ use egui::{Align, Color32, Layout, Response, RichText, Sense, Ui};
 use egui_extras::Column;
 use futures_lite::future::block_on;
 use rfd::AsyncFileDialog;
+use launch_file::{Checksum, LogFormat};
 
 type FilePickerHandle = Option<JoinHandle<Option<PathBuf>>>;
 
@@ -106,12 +107,28 @@ struct MultipleFilePickerData {
 }
 
 pub enum ChecksumStatus {
-    InProgress(JoinHandle<Result<u32, String>>),
-    Checksum(u32),
+    InProgress(JoinHandle<Result<Checksum, String>>),
+    Checksum(Checksum),
     Error(String)
 }
 
 impl ChecksumStatus {
+    pub fn checksum(&self) -> Option<u32> {
+        match self {
+            ChecksumStatus::InProgress(_) => None,
+            ChecksumStatus::Checksum(checksum) => checksum.0.as_ref().ok().copied(),
+            ChecksumStatus::Error(_) => None,
+        }
+    }
+
+    pub fn inline_header(&self) -> Option<&Arc<LogFormat>> {
+        match self {
+            ChecksumStatus::InProgress(_) => None,
+            ChecksumStatus::Checksum(checksum) => checksum.0.as_ref().err(),
+            ChecksumStatus::Error(_) => None
+        }
+    }
+
     fn is_done(&self) -> bool {
         if let ChecksumStatus::InProgress(handle) = self {
             handle.is_finished()
@@ -120,9 +137,9 @@ impl ChecksumStatus {
         }
     }
 
-    fn unwrap_handle(&mut self) -> Option<JoinHandle<Result<u32, String>>> {
+    fn unwrap_handle(&mut self) -> Option<JoinHandle<Result<Checksum, String>>> {
         if let ChecksumStatus::InProgress(_) = self {
-            let ChecksumStatus::InProgress(handle) = std::mem::replace(self, ChecksumStatus::Checksum(0)) else { unreachable!() };
+            let ChecksumStatus::InProgress(handle) = std::mem::replace(self, ChecksumStatus::Checksum(Checksum(Ok(0)))) else { unreachable!() };
             Some(handle)
         } else {
             None
@@ -140,12 +157,25 @@ impl SelectedPath {
     pub fn from_path(path: impl Into<PathBuf>) -> SelectedPath {
         let path = path.into();
         let short_name = path.file_name().map_or(String::new(), |name| name.to_string_lossy().into_owned());
-        let checksum = ChecksumStatus::InProgress(thread::spawn({let path = path.clone(); move || {
-            let mut file = File::open(&path).map_err(|_| "Could not open file.".to_string())?;
-            let mut buf = [0; 4];
-            file.read_exact(&mut buf).map_err(|_| "Could not read from file.".to_string())?;
-            Ok(u32::from_le_bytes(buf))
-        }}));
+        let checksum = ChecksumStatus::InProgress(thread::spawn({
+            let path = path.clone();
+            move || {
+                let mut file = File::open(&path).map_err(|_| "Could not open file.".to_string())?;
+                let mut buf = [0; 4];
+                file.read_exact(&mut buf).map_err(|_| "Could not read from file.".to_string())?;
+                let checksum_raw = u32::from_le_bytes(buf);
+                if checksum_raw == Checksum::SENTINEL {
+                    let mut buf = [0; 2];
+                    file.read_exact(&mut buf).map_err(|_| "Could not read from file.".to_string())?;
+                    let length = u16::from_le_bytes(buf) as usize;
+                    let mut format_header = vec![0; length];
+                    file.read_exact(&mut format_header).map_err(|_| "Could not read from file.".to_string())?;
+                    Ok(Checksum(Err(Arc::new(LogFormat::from_inline_header(&format_header)?))))
+                } else {
+                    Ok(Checksum(Ok(checksum_raw)))
+                }
+            }
+        }));
 
         SelectedPath { path, short_name, checksum }
     }
@@ -249,7 +279,11 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                                             ui.spinner();
                                         },
                                         ChecksumStatus::Checksum(checksum) => {
-                                            ui.add(egui::Label::new(format!("0x{:0>8x}", checksum)).selectable(false));
+                                            if let Ok(checksum) = checksum.0 {
+                                                ui.add(egui::Label::new(format!("0x{:0>8x}", checksum)).selectable(false));
+                                            } else {
+                                                ui.add(egui::Label::new("Inline").selectable(false));
+                                            }
                                         }
                                         ChecksumStatus::Error(message) => {
                                             ui.add(egui::Label::new(RichText::new(message).color(Color32::RED)).truncate().selectable(false));
@@ -272,7 +306,7 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
             if let Some(handle) = file_picker_data.file_dialog_handle.take_if(|handle| handle.is_finished()) {
                 let maybe_path = handle.join().unwrap();
                 if let Some(paths) = maybe_path {
-                    self.paths.extend(paths);
+                    self.paths.extend(paths.into_iter());
                 }
             }
 

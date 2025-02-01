@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 
 use dataframe::{Data, DataFrameBuilder, DataType, RowMut};
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Eq, PartialEq)]
 #[serde(tag = "type")]
 pub enum SerializedCpp {
     #[serde(rename = "bool")]

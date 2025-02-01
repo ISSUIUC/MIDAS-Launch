@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::{io, io::BufReader};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -69,7 +70,7 @@ struct ImportLaunchTab {
     format_path: String,
     python_command: String,
     loading_format_task: Option<JoinHandle<Result<LogFormat, String>>>,
-    loaded_format: Option<LogFormat>,
+    loaded_format: Option<Arc<LogFormat>>,
     format_message: Option<String>,
 
     parsing: Option<ProgressTask<Result<DataFrameView, io::Error>>>,
@@ -137,7 +138,7 @@ impl ImportLaunchTab {
                         let format_res = self.loading_format_task.take().unwrap().join().unwrap();
                         match format_res {
                             Ok(format) => {
-                                self.loaded_format = Some(format);
+                                self.loaded_format = Some(Arc::new(format));
                             }
                             Err(msg) => { self.format_message = Some(msg); }
                         }
@@ -155,7 +156,7 @@ impl ImportLaunchTab {
                         let path = PathBuf::from(self.format_path.clone());
                         let ctx_clone = ui.ctx().clone();
                         self.loading_format_task = Some(std::thread::spawn(move || {
-                            let result = LogFormat::from_file(&path, python);
+                            let result = LogFormat::from_format_file(&path, python);
                             ctx_clone.request_repaint_after(Duration::from_millis(100));
                             result
                         }));
@@ -192,52 +193,63 @@ impl ImportLaunchTab {
 
                 ui.add(egui::ProgressBar::new(task.progress()).show_percentage());
             } else {
-                if let (Some(loaded_format), true) = (&self.loaded_format, !self.source_paths.is_empty()) {
-                    let response = ui.add_enabled(true, egui::Button::new("Load Data"));
-
-                    if response.clicked() {
-                        self.parsing_message = None;
-                        shared.take();
-                        let format = loaded_format.clone();
-                        let source_paths: Vec<PathBuf> = self.source_paths.iter().map(|path| path.path.clone()).collect();
-
-                        self.parsing = Some(ProgressTask::new(ui.ctx(), move |progress| {
-                            let mut file_sizes = vec![None; source_paths.len()];
-                            let mut total_file_size = 0;
-                            for (i, source_path) in source_paths.iter().enumerate() {
-                                if let Ok(metadata) = std::fs::metadata(source_path) {
-                                    file_sizes[i] = Some(metadata.len());
-                                    total_file_size += metadata.len();
-                                }
-                            }
-
-                            let mut reader = format.reader(Some(total_file_size));
-
-                            let mut current_offset = 0;
-                            for (i, source_path) in source_paths.iter().enumerate() {
-                                let mut file = BufReader::new(File::open(source_path)?);
-
-                                if let Some(file_size) = file_sizes[i] {
-                                    reader.read_file(&mut file, |offset| {
-                                        progress.set((offset + current_offset) as f32 / total_file_size as f32);
-                                    })?;
-                                    current_offset += file_size;
-                                } else {
-                                    let mut this_file_size = 0;
-                                    reader.read_file(&mut file, |offset| {
-                                        progress.set((offset + current_offset) as f32 / (total_file_size + offset) as f32);
-                                        this_file_size = offset;
-                                    })?;
-                                    total_file_size += this_file_size;
-                                    current_offset += this_file_size;
-                                }
-                            }
-
-                            Ok(reader.finish())
-                        }));
+                let format = if let Some(loaded) = self.loaded_format.as_ref() {
+                    let all_equal = self.source_paths.iter().all(|selected| {
+                        selected.checksum.checksum().is_some_and(|checksum| checksum == loaded.checksum)
+                    });
+                    all_equal.then(|| loaded.clone())
+                } else if let Some(compare_to) = self.source_paths.first() {
+                    if let Some(format) = compare_to.checksum.inline_header() {
+                        let all_equal = self.source_paths.iter().all(|selected| {
+                            selected.checksum.inline_header().is_some_and(|other| other == format)
+                        });
+                        all_equal.then(|| format.clone())
+                    } else {
+                        None
                     }
                 } else {
-                    ui.add_enabled(false, egui::Button::new("Load Data")).on_disabled_hover_text("Choose data and load format.");
+                    None
+                };
+
+                let response = ui.add_enabled(format.is_some(), egui::Button::new("Load Data")).on_disabled_hover_text("Choose data and load format.");
+                if let (true, Some(format)) = (response.clicked(), format) {
+                    self.parsing_message = None;
+                    shared.take();
+                    let source_paths: Vec<PathBuf> = self.source_paths.iter().map(|path| path.path.clone()).collect();
+                    self.parsing = Some(ProgressTask::new(ui.ctx(), move |progress| {
+                        let mut file_sizes = vec![None; source_paths.len()];
+                        let mut total_file_size = 0;
+                        for (i, selected_path) in source_paths.iter().enumerate() {
+                            if let Ok(metadata) = std::fs::metadata(&selected_path) {
+                                file_sizes[i] = Some(metadata.len());
+                                total_file_size += metadata.len();
+                            }
+                        }
+
+                        let mut reader = format.reader(Some(total_file_size));
+
+                        let mut current_offset = 0;
+                        for (i, selected_path) in source_paths.iter().enumerate() {
+                            let mut file = BufReader::new(File::open(&selected_path)?);
+
+                            if let Some(file_size) = file_sizes[i] {
+                                reader.read_file(&mut file, |offset| {
+                                    progress.set((offset + current_offset) as f32 / total_file_size as f32);
+                                })?;
+                                current_offset += file_size;
+                            } else {
+                                let mut this_file_size = 0;
+                                reader.read_file(&mut file, |offset| {
+                                    progress.set((offset + current_offset) as f32 / (total_file_size + offset) as f32);
+                                    this_file_size = offset;
+                                })?;
+                                total_file_size += this_file_size;
+                                current_offset += this_file_size;
+                            }
+                        }
+
+                        Ok(reader.finish())
+                    }));
                 }
             }
 
