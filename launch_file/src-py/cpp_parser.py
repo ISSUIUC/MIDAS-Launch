@@ -33,9 +33,9 @@ struct: "struct" IDENTIFIER struct_items ";"
 struct_items: "{" struct_item* "}"
 struct_item: type field_decl ("," field_decl)* ";" -> fields
            | IDENTIFIER parenthesized ("=" "default" | initializer_list block) ";"? -> constructor
-           | type IDENTIFIER parenthesized "const"? block -> method
+           | "static"? type IDENTIFIER parenthesized "const"? block -> method
 
-field_decl: decl (("=" const_expr) | "{" "}")?
+field_decl: decl (("=" (const_expr | block)) | block)?
 decl: IDENTIFIER ("[" const_expr "]")*
 
 initializer_list: (":" (initializer ",")* initializer)?
@@ -43,7 +43,7 @@ initializer: IDENTIFIER parenthesized
 
 ?const_expr_0: number
              | IDENTIFIER -> ident
-             | "(" const_expr ")" 
+             | "(" const_expr ")"
              | "sizeof" "(" type ")" -> sizeof
 
 ?const_expr_1: const_expr_1 "+" const_expr_0 -> addition
@@ -64,6 +64,8 @@ block: "{" inner* "}"
 ?type: IDENTIFIER -> type_name
      | IDENTIFIER "<" template_args ">" -> type_generic
      | anonymous_union
+     | type "&"
+     | "const" type
 template_args: (template_arg ("," template_arg)*)?
 ?template_arg: type | const_expr
 anonymous_union: "union" "{" union_variant+ "}"
@@ -85,7 +87,7 @@ TOKEN: IDENTIFIER
      | DECIMAL | BINARY | HEX | OCT
      | "." | "," | "?" | "/" | "=" | "+"
      | "-" | "*" | "~" | "!" | "%" | "^"
-     | "&" | "|" | ":" | "<" | ">" 
+     | "&" | "|" | ":" | "<" | ">"
 
 %import common.C_COMMENT
 %import common.CPP_COMMENT
@@ -127,6 +129,8 @@ class Type(ABC):
             idx += size
             if align > max_align:
                 max_align = align
+        if idx % max_align != 0:
+            idx += max_align - idx % max_align
         return idx, max_align
 
     @staticmethod
@@ -728,7 +732,10 @@ def parse_file(file: Path) -> Context:
 
     parser = Lark(grammar, parser="earley")
     # parse the text into an AST made of lark.Tree and lark.Token
-    tree = parser.parse(text)
+    try:
+        tree = parser.parse(text)
+    except Exception as e:
+        raise Exception(f"Could not parse {file}") from e
     # create the global namespace, containing the default types like `bool` and `int`
     ctxt = BASE_CTXT.clone()
     # create the base Calculate instance for the global namespace, then run it for the AST given
