@@ -675,6 +675,10 @@ BASE_CTXT = Context(BASE_NAMES, BASE_TYPES, BASE_TEMPLATES)
 STD_HEADERS = {
     "<cmath>": "",
     "<cstdint>": "",
+    "<algorithm>": "",
+    "<cstring>": "",
+    "<string>": "",
+    "<string.h>": "",
     "<math.h>": ""
 }
 
