@@ -203,7 +203,7 @@ impl ProcessTab {
     pub fn new(_cc: &eframe::CreationContext) -> ProcessTab {
         ProcessTab {
             steps: vec![
-                Step::Sort(0, false, VirtualColumn::Column(1)),
+                Step::Sort(0, false, VirtualColumn::Column(2)),
                 Step::Fill(1, true, true),
             ],
             step_id: 2,

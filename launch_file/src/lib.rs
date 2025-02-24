@@ -192,7 +192,7 @@ impl<'f> LaunchFileReader<'f> {
 
         let result: io::Result<()> = try_catch!({
             let mut read_buf = vec![0u8; self.largest].into_boxed_slice();
-            let mut last: Option<&Deserializer> = None;
+            // let mut last: Option<&Deserializer> = None;
             let mut last_timestamp = 0;
             let mut synchronizing_amount = 0;
             loop {
@@ -216,7 +216,7 @@ impl<'f> LaunchFileReader<'f> {
                     eprintln!("Stepped {} bytes forward from offset {} to synchronize to timestamp {}.", synchronizing_amount, offset -7 - synchronizing_amount, timestamp_ms);
                     synchronizing_amount = 0;
                 }
-                last = Some(fast_format);
+                // last = Some(fast_format);
                 last_timestamp = timestamp_ms;
 
                 let row_idx = self.dataframe.add_null_row();
