@@ -42,7 +42,7 @@ initializer_list: (":" (initializer ",")* initializer)?
 initializer: IDENTIFIER parenthesized
 
 ?const_expr_0: number
-             | IDENTIFIER -> ident
+             | IDENTIFIER ("::" IDENTIFIER)* -> ident
              | "(" const_expr ")"
              | "sizeof" "(" type ")" -> sizeof
 
@@ -65,6 +65,7 @@ block: "{" inner* "}"
      | IDENTIFIER "<" template_args ">" -> type_generic
      | anonymous_union
      | type "&"
+     | type "*"
      | "const" type
 template_args: (template_arg ("," template_arg)*)?
 ?template_arg: type | const_expr
