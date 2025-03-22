@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 use serde::Deserialize;
 use byteorder::{LittleEndian, ReadBytesExt};
 use directories::ProjectDirs;
-use dataframe::{Data, DataFrame, DataFrameBuilder, DataFrameView, DataType};
+use dataframe::{Data, DataFrame, DataFrameView, DataType};
 
 use crate::deserialize::{SerializedCpp, Deserializer, DeserializerBuilder};
 
@@ -137,7 +137,7 @@ pub struct LaunchFileReader<'f> {
 
 impl<'f> LaunchFileReader<'f> {
     fn new(format: &'f LogFormat, total_file_size: Option<u64>) -> Self {
-        let mut dataframe_builder = DataFrameBuilder::new();
+        let mut dataframe_builder = DataFrame::builder();
         dataframe_builder.add_column("sensor", DataType::Intern);
         dataframe_builder.add_column("file number", DataType::Integer);
         dataframe_builder.add_column("timestamp", DataType::Integer);
@@ -247,9 +247,6 @@ impl<'f> LaunchFileReader<'f> {
 
     pub fn finish(mut self) -> DataFrameView {
         self.dataframe.hint_complete();
-        DataFrameView {
-            rows: self.row_numbers,
-            df: Arc::new(self.dataframe)
-        }
+        DataFrameView::from_dataframe_and_rows(self.dataframe, self.row_numbers)
     }
 }

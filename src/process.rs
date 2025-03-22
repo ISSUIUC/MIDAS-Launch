@@ -35,7 +35,7 @@ impl StepType {
             StepType::Fill => Step::Fill(id, true, true),
             StepType::ColEq => Step::ColEq(id, VirtualColumn::RowIndex, "".to_string()),
             StepType::Within => Step::Within(id, VirtualColumn::RowIndex, false, "".to_string(), false, "".to_string()),
-            StepType::Sort => Step::Sort(id, false, VirtualColumn::RowIndex),
+            StepType::Sort => Step::Sort(id, false, VirtualColumn::RowIndex, true),
             StepType::Decimate => Step::Decimate(id, 2)
         }
     }
@@ -46,7 +46,7 @@ enum Step {
     Fill(u64, bool, bool),
     ColEq(u64, VirtualColumn, String),
     Within(u64, VirtualColumn, bool, String, bool, String),
-    Sort(u64, bool, VirtualColumn),
+    Sort(u64, bool, VirtualColumn, bool),
     Decimate(u64, usize),
 }
 
@@ -56,7 +56,7 @@ impl Step {
             Step::Fill(_, _, _) => StepType::Fill,
             Step::ColEq(_, _, _) => StepType::ColEq,
             Step::Within(_, _, _, _, _, _) => StepType::Within,
-            Step::Sort(_, _, _) => StepType::Sort,
+            Step::Sort(_, _, _, _) => StepType::Sort,
             Step::Decimate(_, _) => StepType::Decimate,
         }
     }
@@ -66,7 +66,7 @@ impl Step {
             Step::Fill(id, _, _) => *id,
             Step::ColEq(id, _, _) => *id,
             Step::Within(id, _, _, _, _, _) => *id,
-            Step::Sort(id, _, _) => *id,
+            Step::Sort(id, _, _, _) => *id,
             Step::Decimate(id, _) => *id,
         }
     }
@@ -97,25 +97,27 @@ impl Step {
                     }
                 }
 
+                let mut new_df = df.backing().empty_like(shape.rows);
+
                 for row_idx in 0..shape.rows {
-                    let mut row = df.row_mut(row_idx);
+                    let original_row = df.row(row_idx);
+                    let mut new_row = new_df.row_mut(row_idx);
 
                     for (i, prev_value) in prev_values.iter_mut().enumerate() {
-                        if let Some(value) = row.get_col_raw(VirtualColumn::Column(i)) {
+                        if let Some(value) = original_row.get_col_raw(VirtualColumn::Column(i)) {
                             *prev_value = Some(value);
-                        } else {
-                            row.set_col_raw(i, *prev_value);
                         }
+                        new_row.set_col_raw(i, *prev_value);
                     }
 
                     progress.set(row_idx as f32 / shape.rows as f32);
                 }
                 progress.set(1.0);
 
-                df
+                DataFrameView::from_dataframe(new_df)
             }
             Step::ColEq(_, col_idx, value) => {
-                let equal_to = df.df.col(*col_idx).data_type().parse_str(value);
+                let equal_to = df.col(*col_idx).data_type().parse_str(value);
                 let rows = df.shape().rows as f32;
 
                 progress.set(0.0);
@@ -131,7 +133,7 @@ impl Step {
                 df
             }
             Step::Within(_, col_idx, has_lower_bound, lower_bound, has_upper_bound, upper_bound) => {
-                let dtype = df.df.col(*col_idx).data_type();
+                let dtype = df.col(*col_idx).data_type();
                 let rows = df.shape().rows as f32;
 
                 let bounds = (
@@ -151,13 +153,9 @@ impl Step {
 
                 df
             }
-            Step::Sort(_, descending, col_idx) => {
+            Step::Sort(_, descending, col_idx, progress_sort) => {
                 progress.set(0.0);
-                if *descending {
-                    df.sort_by_desc(*col_idx);
-                } else {
-                    df.sort_by_asc(*col_idx);
-                }
+                df.sort_by(!*descending, *progress_sort, *col_idx, |p| progress.set(p));
                 progress.set(1.0);
                 df
             }
@@ -203,7 +201,7 @@ impl ProcessTab {
     pub fn new(_cc: &eframe::CreationContext) -> ProcessTab {
         ProcessTab {
             steps: vec![
-                Step::Sort(0, false, VirtualColumn::Column(2)),
+                Step::Sort(0, false, VirtualColumn::Column(2), true),
                 Step::Fill(1, true, true),
             ],
             step_id: 2,
@@ -300,7 +298,7 @@ impl ProcessTab {
                                                 ui.text_edit_singleline(upper_bound);
                                             });
                                         }
-                                        Step::Sort(id, is_desc, col_idx) => {
+                                        Step::Sort(id, is_desc, col_idx, is_progress_sort) => {
                                             ui.horizontal(|ui| {
                                                 ui.label("Sort");
                                                 egui::ComboBox::from_id_salt(format!("combo-sort-{id}"))
@@ -315,6 +313,11 @@ impl ProcessTab {
                                                 ui.label("By");
 
                                                 column_select_combobox(ui, format!("combo-by-{id}"), col_idx, &shared.complete_data);
+                                            });
+
+                                            ui.horizontal(|ui| {
+                                                ui.label("Progress?");
+                                                ui.checkbox(is_progress_sort, "");
                                             });
                                         }
                                         Step::Decimate(_, factor) => {

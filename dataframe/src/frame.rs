@@ -231,6 +231,19 @@ pub struct DataFrame {
 }
 
 impl DataFrame {
+    pub fn builder() -> DataFrameBuilder {
+        DataFrameBuilder::new()
+    }
+
+    pub fn empty_like(&self, rows: usize) -> DataFrame {
+        DataFrame {
+            mem: vec![0; rows * self.header.size()],
+            rows,
+            context: self.context.clone(),
+            header: self.header.clone()
+        }
+    }
+
     pub fn shape(&self) -> Shape {
         Shape { rows: self.rows, cols: self.header.num_cols() }
     }
@@ -251,7 +264,7 @@ impl DataFrame {
     }
 
     pub fn row(&self, index: usize) -> Row<'_> {
-        debug_assert!(index < self.rows);
+        assert!(index < self.rows);
         let start = self.header.num_cols() * index;
         Row {
             row_index: index,
@@ -262,7 +275,7 @@ impl DataFrame {
     }
 
     pub fn row_mut(&mut self, index: usize) -> RowMut<'_> {
-        debug_assert!(index < self.rows);
+        assert!(index < self.rows);
         let start = self.header.num_cols() * index;
         RowMut {
             row_index: index,

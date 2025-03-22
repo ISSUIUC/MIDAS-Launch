@@ -2,7 +2,7 @@ use std::{io, io::BufRead};
 use std::sync::Arc;
 
 use crate::data::{Data, DataType};
-use crate::frame::{DataFrame, DataFrameBuilder, Row, RowMut, Shape, Column, VirtualColumn};
+use crate::frame::{DataFrame, Row, RowMut, Shape, Column, VirtualColumn};
 
 
 pub struct ColumnView<'v> {
@@ -22,13 +22,17 @@ impl<'v> ColumnView<'v> {
             VirtualColumn::Column(_) => self.col.get_row(self.rows[idx])
         }
     }
+
+    pub fn data_type(&self) -> DataType {
+        self.col.data_type()
+    }
 }
 
 
 #[derive(Clone)]
 pub struct DataFrameView {
-    pub rows: Vec<usize>,
-    pub df: Arc<DataFrame>
+    rows: Vec<usize>,
+    df: Arc<DataFrame>,
 }
 
 impl DataFrameView {
@@ -36,6 +40,13 @@ impl DataFrameView {
         DataFrameView {
             rows: (0..df.shape().rows).collect(),
             df: Arc::new(df),
+        }
+    }
+
+    pub fn from_dataframe_and_rows(df: DataFrame, rows: Vec<usize>) -> DataFrameView {
+        DataFrameView {
+            rows,
+            df: Arc::new(df)
         }
     }
 
@@ -48,7 +59,7 @@ impl DataFrameView {
             return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
         }
 
-        let mut dataframe_builder = DataFrameBuilder::new();
+        let mut dataframe_builder = DataFrame::builder();
         let mut data_types = Vec::new();
 
         let mut row_buf = String::new();
@@ -114,6 +125,10 @@ impl DataFrameView {
             rows: self.rows.len(),
             cols: self.df.shape().cols
         }
+    }
+
+    pub fn backing(&self) -> &DataFrame {
+        &self.df
     }
 
     pub fn col_names(&self) -> impl Iterator<Item=&str> {
@@ -185,6 +200,18 @@ impl DataFrameView {
         self.rows = indices;
     }
 
+    pub fn sort_by<P: FnMut(f32)>(&mut self, ascending: bool, progress_tracking: bool, col: VirtualColumn, progress: P) {
+        let mut rows_sorted = self.rows.clone();
+        let col = &self.df.col(col);
+        match (ascending, progress_tracking) {
+            (false, false) => rows_sorted.sort_by(|a_idx, b_idx| col.compare(*a_idx, *b_idx).reverse()),
+            (false, true) => progress_sort(&mut rows_sorted, |&a_idx, &b_idx| col.compare(a_idx, b_idx).reverse(), progress),
+            (true, false) => rows_sorted.sort_by(|a_idx, b_idx| col.compare(*a_idx, *b_idx)),
+            (true, true) => progress_sort(&mut rows_sorted, |&a_idx, &b_idx| col.compare(a_idx, b_idx), progress),
+        }
+        self.rows = rows_sorted;
+    }
+
     pub fn sort_by_asc(&mut self, col: VirtualColumn) {
         let mut rows_sorted = self.rows.clone();
         let col = &self.df.col(col);
@@ -197,5 +224,17 @@ impl DataFrameView {
         let col = &self.df.col(col);
         rows_sorted.sort_by(|a_idx, b_idx| col.compare(*a_idx, *b_idx).reverse());
         self.rows = rows_sorted;
+    }
+}
+
+
+fn progress_sort<T, F, P>(slice: &mut [T], mut compare: F, mut progress: P) where F: FnMut(&T, &T) -> std::cmp::Ordering, P: FnMut(f32) {
+    for i in 0..slice.len() {
+        let mut j = i;
+        while j > 0 && compare(&slice[j-1], &slice[j]).is_gt() {
+            slice.swap(j-1, j);
+            j -= 1;
+        }
+        progress(i as f32 / slice.len() as f32);
     }
 }
