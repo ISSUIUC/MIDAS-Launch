@@ -26,23 +26,42 @@ macro_rules! try_catch {
     ($b:block) => { (|| -> Result<_, _> { $b })() };
 }
 
-pub struct Checksum(pub Result<u32, Arc<LogFormat>>);
-
-impl Checksum {
-    pub const SENTINEL: u32 = u32::from_le_bytes([0xDE, 0xAD, 0xBE, 0xEF]);
-}
+pub const SENTINEL: u32 = u32::from_le_bytes([0xDE, 0xAD, 0xBE, 0xEF]);
 
 static SCRIPT_DIR: LazyLock<Option<ProjectDirs>> = LazyLock::new(|| {
     ProjectDirs::from("", "", "MIDAS Launch")
 });
 
 
-#[derive(Deserialize, Clone, Eq, PartialEq)]
+#[derive(Clone)]
+pub enum FormatType {
+    External { checksum: u32 },
+    Inline(Arc<LogFormat>)
+}
+
+impl FormatType {
+    pub fn from_file(file: &mut impl Read) -> io::Result<FormatType> {
+        let mut buf = [0; 4];
+        file.read_exact(&mut buf)?;
+        let checksum_raw = u32::from_le_bytes(buf);
+        if checksum_raw == SENTINEL {
+            let mut buf = [0; 2];
+            file.read_exact(&mut buf)?;
+            let length = u16::from_le_bytes(buf);
+            let mut format_header = vec![0; length as usize];
+            file.read_exact(&mut format_header)?;
+
+            Ok(FormatType::Inline(Arc::new(LogFormat::from_inline_header(&format_header).map_err(io::Error::other)?)))
+        } else {
+            Ok(FormatType::External { checksum: checksum_raw })
+        }
+    }
+}
+
+#[derive(Eq, PartialEq)]
 pub struct LogFormat {
-    #[serde(rename = "<checksum>")]
-    pub checksum: u32,
-    #[serde(flatten)]
-    pub variants: IndexMap<String, (u32, SerializedCpp)>,
+    skipped_bytes: u32,
+    variants: IndexMap<String, (u32, SerializedCpp)>,
 }
 
 impl LogFormat {
@@ -57,12 +76,20 @@ impl LogFormat {
     pub fn from_inline_header(data: &[u8]) -> Result<Self, String> {
         let variants = bytes::from_inline_header_helper(data).ok_or("Malformed Header!".to_owned())?;
         Ok(LogFormat {
-            checksum: Checksum::SENTINEL,
+            skipped_bytes: 4 + 2 + data.len() as u32,
             variants
         })
     }
 
-    pub fn from_format_file(format_file_name: &Path, python: impl AsRef<OsStr>) -> Result<Self, String> {
+    pub fn from_format_file(format_file_name: &Path, python: impl AsRef<OsStr>) -> Result<(u32, Self), String> {
+        #[derive(Deserialize)]
+        pub struct SerializedLogFormat {
+            #[serde(rename = "<checksum>")]
+            pub checksum: u32,
+            #[serde(flatten)]
+            pub variants: IndexMap<String, (u32, SerializedCpp)>,
+        }
+
         let script_dir = SCRIPT_DIR.as_ref().ok_or("Could not find script.".to_string())?;
 
         fs::create_dir_all(script_dir.data_dir()).map_err(|e| format!("Could not create script: {}", e))?;
@@ -111,9 +138,12 @@ impl LogFormat {
         }
 
         let format = fs::read_to_string(&schema_path).map_err(|e| format!("Could not read schema {}", e))?;
-        let format = serde_json::from_str::<LogFormat>(&format).map_err(|e| format!("Could not read schema {}", e))?;
+        let format = serde_json::from_str::<SerializedLogFormat>(&format).map_err(|e| format!("Could not read schema {}", e))?;
 
-        Ok(format)
+        Ok((format.checksum, LogFormat {
+            skipped_bytes: 4,
+            variants: format.variants
+        }))
     }
 
     pub fn reader(&self, total_file_size: Option<u64>) -> LaunchFileReader {
@@ -122,21 +152,18 @@ impl LogFormat {
 }
 
 
-pub struct LaunchFileReader<'f> {
-    #[allow(dead_code)]
-    format: &'f LogFormat,
+pub struct LaunchFileReader {
     dataframe: DataFrame,
     row_numbers: Vec<usize>,
     file_number: i32,
-    #[allow(dead_code)]
-    smallest: usize,
-    largest: usize,
-    variants: AHashMap<u32, (NonZeroU32, Deserializer)>
+    skipped_bytes: u32,
+    variants: AHashMap<u32, (NonZeroU32, Deserializer)>,
+    read_buffer: Box<[u8]>
 }
 
 
-impl<'f> LaunchFileReader<'f> {
-    fn new(format: &'f LogFormat, total_file_size: Option<u64>) -> Self {
+impl LaunchFileReader {
+    fn new(format: &LogFormat, total_file_size: Option<u64>) -> Self {
         let mut dataframe_builder = DataFrame::builder();
         dataframe_builder.add_column("sensor", DataType::Intern);
         dataframe_builder.add_column("file number", DataType::Integer);
@@ -146,13 +173,12 @@ impl<'f> LaunchFileReader<'f> {
         let mut smallest = usize::MAX;
         let mut largest = usize::MIN;
         for (name, (disc, format)) in &format.variants {
-            let mut builder = DeserializerBuilder::new(name.clone(), &mut dataframe_builder);
+            let mut builder = DeserializerBuilder::new(&mut dataframe_builder);
             format.to_fast(&mut builder, name);
             let fast_format = builder.finish();
             smallest = smallest.min(fast_format.size).max(1);
             largest = largest.max(fast_format.size);
 
-            dbg!(name, fast_format.size);
             let key = dataframe_builder.add_interned_string(name);
             variants.insert(*disc, (key, fast_format));
         }
@@ -167,32 +193,23 @@ impl<'f> LaunchFileReader<'f> {
             dataframe = dataframe_builder.build();
         }
         LaunchFileReader {
-            format,
             dataframe,
             row_numbers,
             file_number: 0,
-            smallest,
-            largest,
-            variants
+            skipped_bytes: format.skipped_bytes,
+            variants,
+            read_buffer: vec![0u8; largest].into_boxed_slice()
         }
     }
 
     pub fn read_file(&mut self, file: &mut (impl Read + Seek), mut on_row_callback: impl FnMut(u64)) -> io::Result<u64> {
-        // todo
-        // if let Some(file_size) = file_size {
-        //     let maximum_needed_rows = file_size.div_ceil(self.smallest as u64 + 8);
-        //     self.dataframe.hint_rows()
-        // }
-
         let mut offset: u64 = 0;
         let mut added_rows = 0;
         self.file_number += 1;
 
-        let _checksum = file.read_u32::<LittleEndian>()?; offset += 4;
+        file.seek_relative(self.skipped_bytes as i64)?; offset += self.skipped_bytes as u64;
 
         let result: io::Result<()> = try_catch!({
-            let mut read_buf = vec![0u8; self.largest].into_boxed_slice();
-            // let mut last: Option<&Deserializer> = None;
             let mut last_timestamp = 0;
             let mut synchronizing_amount = 0;
             loop {
@@ -203,7 +220,6 @@ impl<'f> LaunchFileReader<'f> {
                     file.seek_relative(-7)?;
                     offset -= 7;
                     synchronizing_amount += 1;
-                    // return Err(io::Error::other(format!("No variant for discriminant {} at offset {}", determinant, offset - 4 + rewind_amount as u64)));
                     continue;
                 };
                 if last_timestamp != 0 && timestamp_ms.abs_diff(last_timestamp) >= 500 {
@@ -213,10 +229,9 @@ impl<'f> LaunchFileReader<'f> {
                     continue;
                 }
                 if synchronizing_amount != 0 {
-                    eprintln!("Stepped {} bytes forward from offset {} to synchronize to timestamp {}.", synchronizing_amount, offset -7 - synchronizing_amount, timestamp_ms);
+                    eprintln!("Stepped {} bytes forward from offset {} to synchronize to timestamp {}.", synchronizing_amount, offset - 7 - synchronizing_amount, timestamp_ms);
                     synchronizing_amount = 0;
                 }
-                // last = Some(fast_format);
                 last_timestamp = timestamp_ms;
 
                 let row_idx = self.dataframe.add_null_row();
@@ -226,9 +241,9 @@ impl<'f> LaunchFileReader<'f> {
                 row.set_col_with_ty(1, DataType::Integer, Data::Integer(self.file_number - 1));
                 row.set_col_with_ty(2, DataType::Integer, Data::Integer(timestamp_ms as i32));
 
-                file.read_exact(&mut read_buf[..fast_format.size])?;
+                file.read_exact(&mut self.read_buffer[..fast_format.size])?;
 
-                fast_format.parse(&read_buf[..fast_format.size], &mut row);
+                fast_format.parse(&self.read_buffer[..fast_format.size], &mut row);
                 self.row_numbers.push(row_idx);
                 offset += fast_format.size as u64;
                 added_rows += 1;

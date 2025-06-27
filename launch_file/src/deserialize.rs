@@ -58,7 +58,6 @@ pub enum ReadType {
 }
 
 pub struct Deserializer {
-    pub name: String,
     items: Vec<(ReadType, usize)>,
     enums: Vec<AHashMap<u32, NonZeroU32>>,
     pub size: usize
@@ -106,7 +105,6 @@ impl Deserializer {
 }
 
 pub struct DeserializerBuilder<'a> {
-    name: String,
     builder: &'a mut DataFrameBuilder,
 
     items: Vec<(ReadType, usize)>,
@@ -115,9 +113,8 @@ pub struct DeserializerBuilder<'a> {
 }
 
 impl<'a> DeserializerBuilder<'a> {
-    pub fn new(name: String, builder: &'a mut DataFrameBuilder) -> DeserializerBuilder<'a> {
+    pub fn new(builder: &'a mut DataFrameBuilder) -> DeserializerBuilder<'a> {
         DeserializerBuilder {
-            name,
             builder,
             items: vec![],
             offset: 0,
@@ -126,7 +123,7 @@ impl<'a> DeserializerBuilder<'a> {
     }
 
     pub fn finish(self) -> Deserializer {
-        Deserializer { name: self.name, items: self.items, enums: self.enums, size: self.offset }
+        Deserializer { items: self.items, enums: self.enums, size: self.offset }
     }
 
     fn read_bool(&mut self, name: impl Into<String>) {

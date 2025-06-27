@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use egui::{Color32, Ui};
 use eframe::Storage;
 
-use crate::{DataShared, UpdateContext, ProgressTask};
+use crate::{UpdateContext, ProgressTask};
 use crate::file_picker::FilePicker;
 
 

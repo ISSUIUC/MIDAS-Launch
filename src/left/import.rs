@@ -61,8 +61,8 @@ struct ImportLaunchTab {
 
     format_path: String,
     python_command: String,
-    loading_format_task: Option<JoinHandle<Result<LogFormat, String>>>,
-    loaded_format: Option<Arc<LogFormat>>,
+    loading_format_task: Option<JoinHandle<Result<(u32, LogFormat), String>>>,
+    loaded_format: Option<(u32, Arc<LogFormat>)>,
     format_message: Option<String>,
 
     parsing: Option<ProgressTask<Result<DataFrameView, io::Error>>>,
@@ -108,7 +108,7 @@ impl ImportLaunchTab {
             );
         });
 
-        let data_format_header = self.loaded_format.as_ref().map_or("Data Format".to_string(), |f| format!("Data Format - 0x{:0>8x}", f.checksum));
+        let data_format_header = self.loaded_format.as_ref().map_or("Data Format".to_string(), |f| format!("Data Format - 0x{:0>8x}", f.0));
         egui::CollapsingHeader::new(data_format_header).id_salt("data-format-header").default_open(true).show(ui, |ui| {
             ui.add(FilePicker::new("data-format-picker", &mut self.format_path)
                 .dialog_title("Data Format")
@@ -129,8 +129,8 @@ impl ImportLaunchTab {
                     if handle.is_finished() {
                         let format_res = self.loading_format_task.take().unwrap().join().unwrap();
                         match format_res {
-                            Ok(format) => {
-                                self.loaded_format = Some(Arc::new(format));
+                            Ok((checksum, format)) => {
+                                self.loaded_format = Some((checksum, Arc::new(format)));
                             }
                             Err(msg) => { self.format_message = Some(msg); }
                         }
@@ -185,21 +185,29 @@ impl ImportLaunchTab {
 
                 ui.add(egui::ProgressBar::new(task.progress()).show_percentage());
             } else {
-                let format = if let Some(loaded) = self.loaded_format.as_ref() {
-                    let all_equal = self.source_paths.iter().all(|selected| {
-                        selected.checksum.checksum().is_some_and(|checksum| checksum == loaded.checksum)
-                    });
-                    all_equal.then(|| loaded.clone())
-                } else if let Some(compare_to) = self.source_paths.first() {
-                    if let Some(format) = compare_to.checksum.inline_header() {
-                        let all_equal = self.source_paths.iter().all(|selected| {
-                            selected.checksum.inline_header().is_some_and(|other| other == format)
-                        });
-                        all_equal.then(|| format.clone())
-                    } else {
-                        None
+                let format = 'verify_format: {
+                    // first check if all the files have inline headers and that all the headers are the same
+                    if let Some(compare_to) = self.source_paths.first() {
+                        if let Some(compare_to_format) = compare_to.format_status.inline_header() {
+                            let all_equal = self.source_paths.iter().all(|selected| {
+                                selected.format_status.inline_header() == Some(compare_to_format)
+                            });
+                            if all_equal {
+                                break 'verify_format Some(compare_to_format.clone());
+                            }
+                        }
                     }
-                } else {
+
+                    // otherwise check if all the files have external formats and that it's the loaded format
+                    if let Some((checksum, loaded)) = self.loaded_format.as_ref() {
+                        let all_equal = self.source_paths.iter().all(|selected| {
+                            selected.format_status.checksum() == Some(*checksum)
+                        });
+                        if all_equal {
+                            break 'verify_format Some(loaded.clone());
+                        }
+                    }
+
                     None
                 };
 

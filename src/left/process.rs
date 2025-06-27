@@ -7,7 +7,7 @@ use eframe::Storage;
 
 use dataframe::{DataFrameView, VirtualColumn};
 
-use crate::{DataShared, UpdateContext};
+use crate::UpdateContext;
 use crate::{ProgressTask, Progress};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]

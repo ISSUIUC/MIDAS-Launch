@@ -1,15 +1,15 @@
 use std::fs::File;
-use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::path::{Path, PathBuf};
-use std::thread;
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
+
 use egui::{Align, Color32, Layout, Response, RichText, Sense, Ui};
 use egui_extras::Column;
 use futures_lite::future::block_on;
 use rfd::AsyncFileDialog;
-use launch_file::{Checksum, LogFormat};
+
+use launch_file::{FormatType, LogFormat};
 
 type FilePickerHandle = Option<JoinHandle<Option<PathBuf>>>;
 
@@ -106,40 +106,38 @@ struct MultipleFilePickerData {
     file_dialog_handle: Option<JoinHandle<Option<Vec<SelectedPath>>>>
 }
 
-pub enum ChecksumStatus {
-    InProgress(JoinHandle<Result<Checksum, String>>),
-    Checksum(Checksum),
+pub enum HeaderReadingStatus {
+    InProgress(JoinHandle<Result<FormatType, String>>),
+    HeaderType(FormatType),
     Error(String)
 }
 
-impl ChecksumStatus {
+impl HeaderReadingStatus {
     pub fn checksum(&self) -> Option<u32> {
         match self {
-            ChecksumStatus::InProgress(_) => None,
-            ChecksumStatus::Checksum(checksum) => checksum.0.as_ref().ok().copied(),
-            ChecksumStatus::Error(_) => None,
+            HeaderReadingStatus::HeaderType(FormatType::External { checksum }) => Some(*checksum),
+            _ => None,
         }
     }
 
     pub fn inline_header(&self) -> Option<&Arc<LogFormat>> {
         match self {
-            ChecksumStatus::InProgress(_) => None,
-            ChecksumStatus::Checksum(checksum) => checksum.0.as_ref().err(),
-            ChecksumStatus::Error(_) => None
+            HeaderReadingStatus::HeaderType(FormatType::Inline(format)) => Some(format),
+            _ => None
         }
     }
 
     fn is_done(&self) -> bool {
-        if let ChecksumStatus::InProgress(handle) = self {
+        if let HeaderReadingStatus::InProgress(handle) = self {
             handle.is_finished()
         } else {
             false
         }
     }
 
-    fn unwrap_handle(&mut self) -> Option<JoinHandle<Result<Checksum, String>>> {
-        if let ChecksumStatus::InProgress(_) = self {
-            let ChecksumStatus::InProgress(handle) = std::mem::replace(self, ChecksumStatus::Checksum(Checksum(Ok(0)))) else { unreachable!() };
+    fn unwrap_handle(&mut self) -> Option<JoinHandle<Result<FormatType, String>>> {
+        if let HeaderReadingStatus::InProgress(_) = self {
+            let HeaderReadingStatus::InProgress(handle) = std::mem::replace(self, HeaderReadingStatus::Error(String::new())) else { unreachable!() };
             Some(handle)
         } else {
             None
@@ -150,34 +148,22 @@ impl ChecksumStatus {
 pub struct SelectedPath {
     pub path: PathBuf,
     pub short_name: String,
-    pub checksum: ChecksumStatus
+    pub format_status: HeaderReadingStatus
 }
 
 impl SelectedPath {
     pub fn from_path(path: impl Into<PathBuf>) -> SelectedPath {
         let path = path.into();
         let short_name = path.file_name().map_or(String::new(), |name| name.to_string_lossy().into_owned());
-        let checksum = ChecksumStatus::InProgress(thread::spawn({
+        let format_status = HeaderReadingStatus::InProgress(thread::spawn({
             let path = path.clone();
             move || {
                 let mut file = File::open(&path).map_err(|_| "Could not open file.".to_string())?;
-                let mut buf = [0; 4];
-                file.read_exact(&mut buf).map_err(|_| "Could not read from file.".to_string())?;
-                let checksum_raw = u32::from_le_bytes(buf);
-                if checksum_raw == Checksum::SENTINEL {
-                    let mut buf = [0; 2];
-                    file.read_exact(&mut buf).map_err(|_| "Could not read from file.".to_string())?;
-                    let length = u16::from_le_bytes(buf) as usize;
-                    let mut format_header = vec![0; length];
-                    file.read_exact(&mut format_header).map_err(|_| "Could not read from file.".to_string())?;
-                    Ok(Checksum(Err(Arc::new(LogFormat::from_inline_header(&format_header)?))))
-                } else {
-                    Ok(Checksum(Ok(checksum_raw)))
-                }
+                FormatType::from_file(&mut file).map_err(|_| "Could not open file.".to_string())
             }
         }));
 
-        SelectedPath { path, short_name, checksum }
+        SelectedPath { path, short_name, format_status }
     }
 }
 
@@ -251,7 +237,7 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                 .column(Column::exact(60.0))
                 .header(20.0, |mut header| {
                     header.col(|ui| { ui.horizontal_centered(|ui| ui.strong("File Name")); });
-                    header.col(|ui| { ui.horizontal_centered(|ui| ui.strong("Checksum")); });
+                    header.col(|ui| { ui.horizontal_centered(|ui| ui.strong("Format")); });
                 })
                 .body(|mut body| {
                     for path in self.paths.iter_mut() {
@@ -266,26 +252,29 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                                 ui.horizontal_centered(|ui| ui.add(egui::Label::new(&path.short_name).selectable(false).truncate()));
                             });
                             row.col(|ui| {
-                                if path.checksum.is_done() {
-                                    let handle = path.checksum.unwrap_handle().unwrap();
+                                if path.format_status.is_done() {
+                                    let handle = path.format_status.unwrap_handle().unwrap();
                                     match handle.join().unwrap() {
-                                        Ok(checksum) => path.checksum = ChecksumStatus::Checksum(checksum),
-                                        Err(message) => path.checksum = ChecksumStatus::Error(message),
+                                        Ok(header_type) => path.format_status = HeaderReadingStatus::HeaderType(header_type),
+                                        Err(message) => path.format_status = HeaderReadingStatus::Error(message),
                                     }
                                 }
                                 ui.horizontal_centered(|ui| {
-                                    match &path.checksum {
-                                        ChecksumStatus::InProgress(_) => {
+                                    match &path.format_status {
+                                        HeaderReadingStatus::InProgress(_) => {
                                             ui.spinner();
                                         },
-                                        ChecksumStatus::Checksum(checksum) => {
-                                            if let Ok(checksum) = checksum.0 {
-                                                ui.add(egui::Label::new(format!("0x{:0>8x}", checksum)).selectable(false));
-                                            } else {
-                                                ui.add(egui::Label::new("Inline").selectable(false));
+                                        HeaderReadingStatus::HeaderType(checksum) => {
+                                            match checksum {
+                                                FormatType::External { checksum } => {
+                                                    ui.add(egui::Label::new(format!("0x{:0>8x}", checksum)).selectable(false));
+                                                }
+                                                FormatType::Inline(_) => {
+                                                    ui.add(egui::Label::new("Inline").selectable(false));
+                                                }
                                             }
                                         }
-                                        ChecksumStatus::Error(message) => {
+                                        HeaderReadingStatus::Error(message) => {
                                             ui.add(egui::Label::new(RichText::new(message).color(Color32::RED)).truncate().selectable(false));
                                         }
                                     }

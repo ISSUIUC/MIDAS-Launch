@@ -1,9 +1,10 @@
+use std::io::Cursor;
 use byteorder::{LittleEndian, ReadBytesExt};
 use indexmap::IndexMap;
 use crate::deserialize::SerializedCpp;
 
 
-struct FormatHeaderParser<'a>(&'a [u8]);
+struct FormatHeaderParser<'a>(Cursor<&'a [u8]>);
 
 impl<'a> FormatHeaderParser<'a> {
     fn read_u8(&mut self) -> Option<u8> {
@@ -15,8 +16,9 @@ impl<'a> FormatHeaderParser<'a> {
     }
 
     fn take(&mut self, n: usize) -> Option<&'a [u8]> {
-        if let Some((value, remaining)) = self.0.split_at_checked(n) {
-            self.0 = remaining;
+        let position = self.0.position();
+        if let Some(value) = self.0.get_ref().get(position as usize..position as usize + n) {
+            self.0.set_position(position + n as u64);
             Some(value)
         } else {
             None
@@ -33,7 +35,7 @@ impl<'a> FormatHeaderParser<'a> {
         let byte = self.read_u8()?;
         match byte >> 5 {
             0b000 => {
-                let signed = (byte & 0b00010000) == 1;
+                let signed = (byte & 0b00001000) == 1;
                 let size = byte & 0b1111;
                 Some(SerializedCpp::Integer { signed, size })
             }
@@ -89,5 +91,5 @@ impl<'a> FormatHeaderParser<'a> {
 
 
 pub fn from_inline_header_helper(data: &[u8]) -> Option<IndexMap<String, (u32, SerializedCpp)>> {
-    FormatHeaderParser(data).parse()
+    FormatHeaderParser(Cursor::new(data)).parse()
 }
