@@ -6,7 +6,7 @@ resolver = "2"
 name = "midas-launch"
 version = "1.6.0"
 edition = "2021"
-rust-version = "1.77.1"
+rust-version = "1.81.0"
 
 [profile.dev]
 opt-level = 1
@@ -18,10 +18,11 @@ debug = 1
 [dependencies]
 dataframe = { path = "dataframe" }
 launch_file = { path = "launch_file" }
-egui = { version = "0.29", features = ["persistence"] }
-egui_extras = { version = "0.29" }
-egui_plot = { version = "0.29" }
-eframe = { version = "0.29", features = ["default_fonts", "glow", "wayland", "x11", "persistence"], default-features = false }
+egui = { version = "0.31.1", features = ["persistence"] }
+egui_extras = { version = "0.31.1" }
+egui_plot = { version = "0.32.1" }
+egui-toast = { version = "0.17.0" }
+eframe = { version = "0.31.1", features = ["default_fonts", "glow", "wayland", "x11", "persistence"], default-features = false }
 image = { version = "0.25.2", features = ["png"], default-features = false }
 rfd = "0.15.0"
 ron = "0.8.1"

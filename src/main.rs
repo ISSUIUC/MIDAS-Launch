@@ -297,7 +297,7 @@ impl eframe::App for App {
                             self.plot_tab.cache = Some((key, points));
                         }
 
-                        let line = plot::Line::new(self.plot_tab.cache.as_ref().unwrap().1.clone());
+                        let line = plot::Line::new("data", self.plot_tab.cache.as_ref().unwrap().1.clone());
 
                         plot::Plot::new("plot")
                             .allow_drag(false)

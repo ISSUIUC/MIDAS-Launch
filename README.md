@@ -10,7 +10,7 @@
 
 ### Updating
 
-If a new version of this software is available, you can update it by re-running step 3 above.
+If a new version of this software is available, you can update it by re-running step 2 above.
 
 ## Usage
 The workflow for using this software can be divided into 4 steps:
