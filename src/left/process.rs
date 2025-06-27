@@ -7,7 +7,7 @@ use eframe::Storage;
 
 use dataframe::{DataFrameView, VirtualColumn};
 
-use crate::DataShared;
+use crate::{DataShared, DrawContext};
 use crate::{ProgressTask, Progress};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -213,8 +213,8 @@ impl ProcessTab {
 
     pub fn save(&self, _storage: &mut dyn Storage) { }
 
-    pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
-        let Some(shared) = shared else { return; };
+    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
+        let Some(shared) = ctx.data else { return; };
 
         ui.add_space(3.0);
 

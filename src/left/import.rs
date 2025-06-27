@@ -11,7 +11,7 @@ use eframe::Storage;
 use launch_file::LogFormat;
 use dataframe::DataFrameView;
 
-use crate::DataShared;
+use crate::{DataShared, DrawContext};
 use crate::ProgressTask;
 use crate::file_picker::{FilePicker, MultipleFilePicker, SelectedPath};
 
@@ -42,15 +42,7 @@ impl ImportTab {
         self.import_csv_tab.save(storage);
     }
 
-    pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
-        // ui.columns(2, |cols| {
-        //     cols[0].vertical_centered_justified(|ui| {
-        //         ui.selectable_value(&mut self.state, ImportFrom::Launch, ".launch File");
-        //     });
-        //     cols[1].vertical_centered_justified(|ui| {
-        //         ui.selectable_value(&mut self.state, ImportFrom::CSV, ".csv File");
-        //     });
-        // });
+    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
         ui.horizontal(|ui| {
             ui.label("Source type:");
             ui.selectable_value(&mut self.state, ImportFrom::Launch, ".launch File");
@@ -58,8 +50,8 @@ impl ImportTab {
         });
 
         match self.state {
-            ImportFrom::Launch => self.import_launch_tab.show(ui, shared),
-            ImportFrom::CSV => self.import_csv_tab.show(ui, shared)
+            ImportFrom::Launch => self.import_launch_tab.show(ui, ctx),
+            ImportFrom::CSV => self.import_csv_tab.show(ui, ctx)
         }
     }
 }
@@ -108,7 +100,7 @@ impl ImportLaunchTab {
         storage.set_string("import-python-command", self.python_command.clone());
     }
 
-    pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
+    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
         egui::CollapsingHeader::new("Data File".to_string()).id_salt("data-file-header").default_open(true).show(ui, |ui| {
             ui.add(MultipleFilePicker::new("data-file-picker", &mut self.source_paths)
                 .dialog_title("Data File")
@@ -179,7 +171,7 @@ impl ImportLaunchTab {
                     let result = self.parsing.take().unwrap().handle.join().unwrap();
                     match result {
                         Ok(dataframe) => {
-                            shared.replace(DataShared::new(dataframe));
+                            ctx.data.replace(DataShared::new(dataframe));
                         }
                         Err(e) => {
                             self.parsing_message = Some(e.to_string());
@@ -214,7 +206,7 @@ impl ImportLaunchTab {
                 let response = ui.add_enabled(format.is_some(), egui::Button::new("Load Data")).on_disabled_hover_text("Choose data and load format.");
                 if let (true, Some(format)) = (response.clicked(), format) {
                     self.parsing_message = None;
-                    shared.take();
+                    ctx.data.take();
                     let source_paths: Vec<PathBuf> = self.source_paths.iter().map(|path| path.path.clone()).collect();
                     self.parsing = Some(ProgressTask::new(ui.ctx(), move |progress| {
                         let mut file_sizes = vec![None; source_paths.len()];
@@ -279,7 +271,7 @@ impl ImportCSVTab {
 
     pub fn save(&self, _storage: &mut dyn Storage) { }
 
-    pub fn show(&mut self, ui: &mut Ui, shared: &mut Option<DataShared>) {
+    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
         ui.add(FilePicker::new("data-csv-file-picker", &mut self.source_path)
             .dialog_title("Data File")
             .add_filter("CSV", &["csv"])
@@ -294,7 +286,7 @@ impl ImportCSVTab {
                     let result = self.parsing.take().unwrap().handle.join().unwrap();
                     match result {
                         Ok(dataframe) => {
-                            shared.replace(DataShared::new(dataframe));
+                            ctx.data.replace(DataShared::new(dataframe));
                         }
                         Err(e) => {
                             self.parsing_message = Some(e.to_string());
@@ -313,7 +305,7 @@ impl ImportCSVTab {
 
                     if response.clicked() {
                         self.parsing_message = None;
-                        shared.take();
+                        ctx.data.take();
                         let source_path = self.source_path.clone();
 
                         self.parsing = Some(ProgressTask::new(ui.ctx(), move |progress| {

@@ -1,9 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod file_picker;
-mod process;
-mod import;
-mod export;
+mod left;
 
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
@@ -12,26 +10,15 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use egui::{Align, Context, FontFamily, Layout, panel::Side, RichText, Visuals, Widget, Align2, Direction};
+use egui::{Align, Context, FontFamily, Layout, RichText, Visuals, Widget, Align2, Direction};
 use egui_plot as plot;
 use eframe::{Frame, Storage};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use semver::Version;
 use dataframe::{DataFrameView, VirtualColumn};
-
-use crate::import::ImportTab;
-use crate::process::ProcessTab;
-use crate::export::ExportTab;
+use crate::left::Left;
 
 const RELEASES_URL: &'static str = "https://api.github.com/repos/ISSUIUC/MIDAS-Launch/releases";
-
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-enum LeftState {
-    Import,
-    Filter,
-    Export
-}
 
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -101,10 +88,7 @@ enum UpdateInfo {
 }
 
 struct App {
-    left_state: LeftState,
-    import_tab: ImportTab,
-    process_tab: ProcessTab,
-    export_tab: ExportTab,
+    left: Left,
 
     visual_state: VisualState,
     table_tab: TableTab,
@@ -115,6 +99,12 @@ struct App {
     shared: Option<DataShared>,
 
     check_for_update: Option<JoinHandle<UpdateInfo>>,
+}
+
+struct DrawContext<'a> {
+    ctx: &'a Context,
+    toasts: &'a mut Toasts,
+    data: &'a mut Option<DataShared>
 }
 
 fn check_for_update() -> Option<UpdateInfo> {
@@ -141,10 +131,7 @@ impl App {
         }
 
         App {
-            left_state: LeftState::Import,
-            import_tab: ImportTab::new(cc),
-            process_tab: ProcessTab::new(cc),
-            export_tab: ExportTab::new(cc),
+            left: Left::new(cc),
 
             shared: None,
 
@@ -208,42 +195,7 @@ impl eframe::App for App {
 
         ctx.set_visuals(Visuals::light());
 
-        egui::SidePanel::new(Side::Left, "left-panel")
-            // .default_width(180.0)
-            .min_width(240.0)
-            .max_width(400.0)
-            .show(ctx, |ui| {
-                ui.add_space(3.0);
-                ui.columns(3, |columns| {
-                    columns[0].vertical_centered_justified(|ui| {
-                        ui.selectable_value(&mut self.left_state, LeftState::Import, "Import")
-                    });
-                    columns[1].vertical_centered_justified(|ui| {
-                        ui.add_enabled_ui(self.shared.is_some(), |ui| {
-                            ui.selectable_value(&mut self.left_state, LeftState::Filter, "Filter")
-                        });
-                    });
-                    columns[2].vertical_centered_justified(|ui| {
-                        ui.add_enabled_ui(self.shared.is_some(), |ui| {
-                            ui.selectable_value(&mut self.left_state, LeftState::Export, "Export")
-                        });
-                    });
-                });
-                ui.separator();
-
-                match self.left_state {
-                    LeftState::Import => {
-                        self.import_tab.show(ui, &mut self.shared);
-                    }
-                    LeftState::Filter => {
-                        self.process_tab.show(ui, &mut self.shared);
-                    }
-                    LeftState::Export => {
-                        self.export_tab.show(ui, &mut self.shared);
-                    }
-                };
-        });
-
+        self.left.draw(DrawContext { ctx, toasts: &mut toasts, data: &mut self.shared });
 
         if let Some(shared) = &mut self.shared {
             egui::SidePanel::right("plot-table-panel")
@@ -391,9 +343,7 @@ impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn Storage) {
         storage.set_string("was-maximized", self.is_maximized.to_string());
 
-        self.import_tab.save(storage);
-        self.process_tab.save(storage);
-        self.export_tab.save(storage);
+        self.left.save(storage);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
