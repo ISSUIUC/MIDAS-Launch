@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod file_picker;
-mod task_button;
 mod process;
 mod import;
 mod export;
@@ -9,18 +8,22 @@ mod export;
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use egui::{Align, Context, FontFamily, Layout, panel::Side, RichText, Visuals, Widget};
+use egui::{Align, Context, FontFamily, Layout, panel::Side, RichText, Visuals, Widget, Align2, Direction};
 use egui_plot as plot;
 use eframe::{Frame, Storage};
-
+use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
+use semver::Version;
 use dataframe::{DataFrameView, VirtualColumn};
 
 use crate::import::ImportTab;
 use crate::process::ProcessTab;
 use crate::export::ExportTab;
+
+const RELEASES_URL: &'static str = "https://api.github.com/repos/ISSUIUC/MIDAS-Launch/releases";
 
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -91,6 +94,11 @@ impl DataShared {
     }
 }
 
+enum UpdateInfo {
+    CouldNotCheck,
+    LatestVersion,
+    UpdateAvailable(Version)
+}
 
 struct App {
     left_state: LeftState,
@@ -98,13 +106,31 @@ struct App {
     process_tab: ProcessTab,
     export_tab: ExportTab,
 
-    shared: Option<DataShared>,
-
     visual_state: VisualState,
     table_tab: TableTab,
     plot_tab: PlotTab,
 
-    is_maximized: bool
+    is_maximized: bool,
+
+    shared: Option<DataShared>,
+
+    check_for_update: Option<JoinHandle<UpdateInfo>>,
+}
+
+fn check_for_update() -> Option<UpdateInfo> {
+    let mut response = ureq::get(RELEASES_URL).call().ok()?;
+    let body = response.body_mut().read_json::<serde_json::Value>().ok()?;
+
+    let tag_name = body.get(0)?.get("tag_name")?.as_str()?;
+    let latest_version = Version::parse(tag_name.strip_prefix('v')?).ok()?;
+
+    let this_version = Version::parse(env!("CARGO_PKG_VERSION")).ok()?;
+
+    if this_version < latest_version {
+        Some(UpdateInfo::UpdateAvailable(latest_version))
+    } else {
+        Some(UpdateInfo::LatestVersion)
+    }
 }
 
 impl App {
@@ -126,7 +152,11 @@ impl App {
             table_tab: TableTab::new(cc),
             plot_tab: PlotTab::new(cc),
 
-            is_maximized: was_maximized
+            is_maximized: was_maximized,
+
+            check_for_update: Some(thread::spawn(|| {
+                check_for_update().unwrap_or(UpdateInfo::CouldNotCheck)
+            }))
         }
     }
 }
@@ -135,6 +165,46 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         self.is_maximized = ctx.input(|state| state.viewport().maximized.unwrap_or(false));
+
+        let mut toasts = Toasts::new()
+            .anchor(Align2::LEFT_BOTTOM, (5.0, -5.0))
+            .direction(Direction::BottomUp);
+
+        if let Some(update_checker_handle) = self.check_for_update.take_if(|handle| handle.is_finished()) {
+            let update_info = update_checker_handle.join().unwrap();
+            match update_info {
+                UpdateInfo::CouldNotCheck => {
+                    toasts.add(Toast {
+                        text: "Could not fetch updates.".into(),
+                        kind: ToastKind::Warning,
+                        options: ToastOptions::default()
+                            .duration_in_seconds(5.0)
+                            .show_progress(true),
+                        ..Default::default()
+                    })
+                },
+                UpdateInfo::LatestVersion => {
+                    toasts.add(Toast {
+                        text: "No updates available.".into(),
+                        kind: ToastKind::Info,
+                        options: ToastOptions::default()
+                            .duration_in_seconds(5.0)
+                            .show_progress(true),
+                        ..Default::default()
+                    })
+                }
+                UpdateInfo::UpdateAvailable(latest) => {
+                    toasts.add(Toast {
+                        text: format!("Update to version {latest} available.").into(),
+                        kind: ToastKind::Warning,
+                        options: ToastOptions::default()
+                            .duration_in_seconds(5.0)
+                            .show_progress(true),
+                        ..Default::default()
+                    })
+                }
+            };
+        }
 
         ctx.set_visuals(Visuals::light());
 
@@ -297,7 +367,7 @@ impl eframe::App for App {
                             self.plot_tab.cache = Some((key, points));
                         }
 
-                        let line = plot::Line::new("data", self.plot_tab.cache.as_ref().unwrap().1.clone());
+                        let line = plot::Line::new(self.plot_tab.cache.as_ref().unwrap().1.clone());
 
                         plot::Plot::new("plot")
                             .allow_drag(false)
@@ -314,6 +384,8 @@ impl eframe::App for App {
                 });
             }
         });
+
+        toasts.show(ctx);
     }
 
     fn save(&mut self, storage: &mut dyn Storage) {
