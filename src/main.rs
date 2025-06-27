@@ -101,7 +101,7 @@ struct App {
     check_for_update: Option<JoinHandle<UpdateInfo>>,
 }
 
-struct DrawContext<'a> {
+struct UpdateContext<'a> {
     ctx: &'a Context,
     toasts: &'a mut Toasts,
     data: &'a mut Option<DataShared>
@@ -151,6 +151,7 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        ctx.set_visuals(Visuals::light());
         self.is_maximized = ctx.input(|state| state.viewport().maximized.unwrap_or(false));
 
         let mut toasts = Toasts::new()
@@ -184,18 +185,13 @@ impl eframe::App for App {
                     toasts.add(Toast {
                         text: format!("Update to version {latest} available.").into(),
                         kind: ToastKind::Warning,
-                        options: ToastOptions::default()
-                            .duration_in_seconds(5.0)
-                            .show_progress(true),
                         ..Default::default()
                     })
                 }
             };
         }
 
-        ctx.set_visuals(Visuals::light());
-
-        self.left.draw(DrawContext { ctx, toasts: &mut toasts, data: &mut self.shared });
+        self.left.draw(UpdateContext { ctx, toasts: &mut toasts, data: &mut self.shared });
 
         if let Some(shared) = &mut self.shared {
             egui::SidePanel::right("plot-table-panel")

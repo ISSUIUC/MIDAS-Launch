@@ -11,7 +11,7 @@ use eframe::Storage;
 use launch_file::LogFormat;
 use dataframe::DataFrameView;
 
-use crate::{DataShared, DrawContext};
+use crate::{DataShared, UpdateContext};
 use crate::ProgressTask;
 use crate::file_picker::{FilePicker, MultipleFilePicker, SelectedPath};
 
@@ -42,7 +42,7 @@ impl ImportTab {
         self.import_csv_tab.save(storage);
     }
 
-    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
+    pub fn show(&mut self, ui: &mut Ui, ctx: UpdateContext) {
         ui.horizontal(|ui| {
             ui.label("Source type:");
             ui.selectable_value(&mut self.state, ImportFrom::Launch, ".launch File");
@@ -100,7 +100,7 @@ impl ImportLaunchTab {
         storage.set_string("import-python-command", self.python_command.clone());
     }
 
-    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
+    pub fn show(&mut self, ui: &mut Ui, ctx: UpdateContext) {
         egui::CollapsingHeader::new("Data File".to_string()).id_salt("data-file-header").default_open(true).show(ui, |ui| {
             ui.add(MultipleFilePicker::new("data-file-picker", &mut self.source_paths)
                 .dialog_title("Data File")
@@ -271,7 +271,7 @@ impl ImportCSVTab {
 
     pub fn save(&self, _storage: &mut dyn Storage) { }
 
-    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
+    pub fn show(&mut self, ui: &mut Ui, ctx: UpdateContext) {
         ui.add(FilePicker::new("data-csv-file-picker", &mut self.source_path)
             .dialog_title("Data File")
             .add_filter("CSV", &["csv"])

@@ -1,6 +1,6 @@
 use eframe::Storage;
 use egui::panel::Side;
-use crate::DrawContext;
+use crate::UpdateContext;
 use crate::left::export::ExportTab;
 use crate::left::import::ImportTab;
 use crate::left::process::ProcessTab;
@@ -33,7 +33,7 @@ impl Left {
         }
     }
 
-    pub fn draw(&mut self, ctx: DrawContext) {
+    pub fn draw(&mut self, ctx: UpdateContext) {
         egui::SidePanel::new(Side::Left, "left-panel")
             // .default_width(180.0)
             .min_width(240.0)

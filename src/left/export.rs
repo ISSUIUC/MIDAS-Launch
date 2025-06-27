@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use egui::{Color32, Ui};
 use eframe::Storage;
 
-use crate::{DataShared, DrawContext, ProgressTask};
+use crate::{DataShared, UpdateContext, ProgressTask};
 use crate::file_picker::FilePicker;
 
 
@@ -44,7 +44,7 @@ impl ExportTab {
 
     pub fn save(&self, _storage: &mut dyn Storage) { }
 
-    pub fn show(&mut self, ui: &mut Ui, ctx: DrawContext) {
+    pub fn show(&mut self, ui: &mut Ui, ctx: UpdateContext) {
         ui.add_space(3.0);
 
         if let Some(csv_export) = &self.csv.export {
