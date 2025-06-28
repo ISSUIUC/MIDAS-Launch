@@ -2,6 +2,7 @@
 
 mod file_picker;
 mod left;
+mod computation;
 
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
@@ -10,7 +11,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use egui::{Align, Context, FontFamily, Layout, RichText, Visuals, Widget, Align2, Direction};
+use egui::{Align, Context, FontFamily, Layout, RichText, Visuals, Widget, Align2, Direction, WidgetText};
 use egui_plot as plot;
 use eframe::{Frame, Storage};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
@@ -105,6 +106,16 @@ struct UpdateContext<'a> {
     ctx: &'a Context,
     toasts: &'a mut Toasts,
     data: &'a mut Option<DataShared>
+}
+
+impl<'a> UpdateContext<'a> {
+    pub fn error_toast(&mut self, message: impl Into<WidgetText>) {
+        self.toasts.add(Toast {
+            kind: ToastKind::Error,
+            text: message.into(),
+            ..Default::default()
+        });
+    }
 }
 
 fn check_for_update() -> Option<UpdateInfo> {

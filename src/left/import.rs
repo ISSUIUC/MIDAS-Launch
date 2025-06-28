@@ -2,8 +2,6 @@ use std::fs::File;
 use std::{io, io::BufReader};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread::JoinHandle;
-use std::time::Duration;
 
 use egui::{Color32, Ui};
 use eframe::Storage;
@@ -12,6 +10,7 @@ use launch_file::LogFormat;
 use dataframe::DataFrameView;
 
 use crate::{DataShared, UpdateContext};
+use crate::computation::Computation;
 use crate::ProgressTask;
 use crate::file_picker::{FilePicker, MultipleFilePicker, SelectedPath};
 
@@ -61,9 +60,11 @@ struct ImportLaunchTab {
 
     format_path: String,
     python_command: String,
-    loading_format_task: Option<JoinHandle<Result<(u32, LogFormat), String>>>,
-    loaded_format: Option<(u32, Arc<LogFormat>)>,
-    format_message: Option<String>,
+
+    format_loading: Computation<(u32, Arc<LogFormat>), String>,
+    // loading_format_task: Option<JoinHandle<Result<(u32, LogFormat), String>>>,
+    // loaded_format: Option<(u32, Arc<LogFormat>)>,
+    // format_message: Option<String>,
 
     parsing: Option<ProgressTask<Result<DataFrameView, io::Error>>>,
     parsing_message: Option<String>
@@ -85,9 +86,7 @@ impl ImportLaunchTab {
 
             format_path,
             python_command,
-            loading_format_task: None,
-            loaded_format: None,
-            format_message: None,
+            format_loading: Computation::Empty,
 
             parsing: None,
             parsing_message: None
@@ -100,7 +99,7 @@ impl ImportLaunchTab {
         storage.set_string("import-python-command", self.python_command.clone());
     }
 
-    pub fn show(&mut self, ui: &mut Ui, ctx: UpdateContext) {
+    pub fn show(&mut self, ui: &mut Ui, mut ctx: UpdateContext) {
         egui::CollapsingHeader::new("Data File".to_string()).id_salt("data-file-header").default_open(true).show(ui, |ui| {
             ui.add(MultipleFilePicker::new("data-file-picker", &mut self.source_paths)
                 .dialog_title("Data File")
@@ -108,7 +107,7 @@ impl ImportLaunchTab {
             );
         });
 
-        let data_format_header = self.loaded_format.as_ref().map_or("Data Format".to_string(), |f| format!("Data Format - 0x{:0>8x}", f.0));
+        let data_format_header = self.format_loading.value().map_or("Data Format".to_string(), |f| format!("Data Format - 0x{:0>8x}", f.0));
         egui::CollapsingHeader::new(data_format_header).id_salt("data-format-header").default_open(true).show(ui, |ui| {
             ui.add(FilePicker::new("data-format-picker", &mut self.format_path)
                 .dialog_title("Data Format")
@@ -125,40 +124,27 @@ impl ImportLaunchTab {
                     std::thread::spawn(LogFormat::clear_scripts);
                 }
 
-                if let Some(handle) = &self.loading_format_task {
-                    if handle.is_finished() {
-                        let format_res = self.loading_format_task.take().unwrap().join().unwrap();
-                        match format_res {
-                            Ok((checksum, format)) => {
-                                self.loaded_format = Some((checksum, Arc::new(format)));
-                            }
-                            Err(msg) => { self.format_message = Some(msg); }
-                        }
-                        ui.ctx().request_repaint();
-                    }
-                }
+                self.format_loading.check_complete();
 
-                if self.loading_format_task.is_none() {
+                if self.format_loading.is_computing() {
+                    ui.add_enabled(false, egui::Button::new("Loading Format"));
+                } else {
                     let response = ui.add_enabled(!self.format_path.is_empty(), egui::Button::new("Load Format"))
                         .on_disabled_hover_text("Choose format file.");
-                    if response.clicked() {
-                        self.format_message = None;
 
+                    if response.clicked() {
                         let python = PathBuf::from(self.python_command.clone());
                         let path = PathBuf::from(self.format_path.clone());
-                        let ctx_clone = ui.ctx().clone();
-                        self.loading_format_task = Some(std::thread::spawn(move || {
-                            let result = LogFormat::from_format_file(&path, python);
-                            ctx_clone.request_repaint_after(Duration::from_millis(100));
-                            result
-                        }));
+                        self.format_loading.begin(ui.ctx(), move || {
+                            LogFormat::from_format_file(&path, python)
+                                .map(|(checksum, format)| (checksum, Arc::new(format)))
+                        })
                     }
-                } else {
-                    ui.add_enabled(false, egui::Button::new("Loading Format"));
                 }
 
-                if let Some(msg) = &self.format_message {
-                    ui.colored_label(Color32::RED, "!").on_hover_text(msg);
+                if let Some(msg) = self.format_loading.take_error() {
+                    ctx.error_toast(msg);
+                    // ui.colored_label(Color32::RED, "!").on_hover_text(msg);
                 }
             });
         });
@@ -199,7 +185,7 @@ impl ImportLaunchTab {
                     }
 
                     // otherwise check if all the files have external formats and that it's the loaded format
-                    if let Some((checksum, loaded)) = self.loaded_format.as_ref() {
+                    if let Some((checksum, loaded)) = self.format_loading.value() {
                         let all_equal = self.source_paths.iter().all(|selected| {
                             selected.format_status.checksum() == Some(*checksum)
                         });
