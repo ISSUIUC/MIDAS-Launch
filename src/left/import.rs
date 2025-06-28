@@ -6,12 +6,11 @@ use std::sync::Arc;
 use egui::{Color32, Ui};
 use eframe::Storage;
 
-use launch_file::LogFormat;
+use launch_file::{FormatType, LogFormat};
 use dataframe::DataFrameView;
 
 use crate::{DataShared, UpdateContext};
-use crate::computation::Computation;
-use crate::ProgressTask;
+use crate::computation::{Computation, ProgressTask};
 use crate::file_picker::{FilePicker, MultipleFilePicker, SelectedPath};
 
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -72,10 +71,11 @@ struct ImportLaunchTab {
 
 impl ImportLaunchTab {
     pub fn new(cc: &eframe::CreationContext) -> ImportLaunchTab {
+        let ctx = cc.egui_ctx.clone();
         let source_path = cc.storage.and_then(|storage| {
             let stored = storage.get_string("import-source-paths")?;
             let paths = ron::from_str::<'_, Vec<PathBuf>>(&stored).ok()?;
-            let selected = paths.into_iter().map(SelectedPath::from_path).collect();
+            let selected = paths.into_iter().map(|path| SelectedPath::from_path(ctx.clone(), path)).collect();
             Some(selected)
         }).unwrap_or(Vec::new());
         let format_path = cc.storage.and_then(|storage| storage.get_string("import-format-path")).unwrap_or("".to_string());
@@ -135,7 +135,7 @@ impl ImportLaunchTab {
                     if response.clicked() {
                         let python = PathBuf::from(self.python_command.clone());
                         let path = PathBuf::from(self.format_path.clone());
-                        self.format_loading.begin(ui.ctx(), move || {
+                        self.format_loading.begin(ui.ctx().clone(), move || {
                             LogFormat::from_format_file(&path, python)
                                 .map(|(checksum, format)| (checksum, Arc::new(format)))
                         })
@@ -174,9 +174,9 @@ impl ImportLaunchTab {
                 let format = 'verify_format: {
                     // first check if all the files have inline headers and that all the headers are the same
                     if let Some(compare_to) = self.source_paths.first() {
-                        if let Some(compare_to_format) = compare_to.format_status.inline_header() {
+                        if let Some(FormatType::Inline(compare_to_format)) = compare_to.loading_format.value() {
                             let all_equal = self.source_paths.iter().all(|selected| {
-                                selected.format_status.inline_header() == Some(compare_to_format)
+                                selected.loading_format.value() == compare_to.loading_format.value()
                             });
                             if all_equal {
                                 break 'verify_format Some(compare_to_format.clone());
@@ -187,7 +187,7 @@ impl ImportLaunchTab {
                     // otherwise check if all the files have external formats and that it's the loaded format
                     if let Some((checksum, loaded)) = self.format_loading.value() {
                         let all_equal = self.source_paths.iter().all(|selected| {
-                            selected.format_status.checksum() == Some(*checksum)
+                            selected.loading_format.value() == Some(&FormatType::External { checksum: *checksum })
                         });
                         if all_equal {
                             break 'verify_format Some(loaded.clone());

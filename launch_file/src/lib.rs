@@ -33,7 +33,7 @@ static SCRIPT_DIR: LazyLock<Option<ProjectDirs>> = LazyLock::new(|| {
 });
 
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum FormatType {
     External { checksum: u32 },
     Inline(Arc<LogFormat>)
@@ -54,6 +54,20 @@ impl FormatType {
             Ok(FormatType::Inline(Arc::new(LogFormat::from_inline_header(&format_header).map_err(io::Error::other)?)))
         } else {
             Ok(FormatType::External { checksum: checksum_raw })
+        }
+    }
+
+    pub fn as_external(&self) -> Option<u32> {
+        match self {
+            FormatType::External { checksum } => Some(*checksum),
+            _ => None
+        }
+    }
+
+    pub fn as_internal(&self) -> Option<&Arc<LogFormat>> {
+        match self {
+            FormatType::Inline(format) => Some(format),
+            _ => None
         }
     }
 }

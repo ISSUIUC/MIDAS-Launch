@@ -4,19 +4,13 @@ mod file_picker;
 mod left;
 mod computation;
 
-use std::cell::Cell;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::thread;
-use std::thread::JoinHandle;
-use std::time::Duration;
-
 use egui::{Align, Context, FontFamily, Layout, RichText, Visuals, Widget, Align2, Direction, WidgetText};
 use egui_plot as plot;
 use eframe::{Frame, Storage};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use semver::Version;
 use dataframe::{DataFrameView, VirtualColumn};
+use crate::computation::Computation;
 use crate::left::Left;
 
 const RELEASES_URL: &'static str = "https://api.github.com/repos/ISSUIUC/MIDAS-Launch/releases";
@@ -83,7 +77,6 @@ impl DataShared {
 }
 
 enum UpdateInfo {
-    CouldNotCheck,
     LatestVersion,
     UpdateAvailable(Version)
 }
@@ -99,7 +92,7 @@ struct App {
 
     shared: Option<DataShared>,
 
-    check_for_update: Option<JoinHandle<UpdateInfo>>,
+    check_for_update: Computation<UpdateInfo, ()>,
 }
 
 struct UpdateContext<'a> {
@@ -152,9 +145,7 @@ impl App {
 
             is_maximized: was_maximized,
 
-            check_for_update: Some(thread::spawn(|| {
-                check_for_update().unwrap_or(UpdateInfo::CouldNotCheck)
-            }))
+            check_for_update: Computation::begin_new(cc.egui_ctx.clone(), || check_for_update().ok_or(()))
         }
     }
 }
@@ -169,20 +160,12 @@ impl eframe::App for App {
             .anchor(Align2::LEFT_BOTTOM, (5.0, -5.0))
             .direction(Direction::BottomUp);
 
-        if let Some(update_checker_handle) = self.check_for_update.take_if(|handle| handle.is_finished()) {
-            let update_info = update_checker_handle.join().unwrap();
-            match update_info {
-                UpdateInfo::CouldNotCheck => {
-                    toasts.add(Toast {
-                        text: "Could not fetch updates.".into(),
-                        kind: ToastKind::Warning,
-                        options: ToastOptions::default()
-                            .duration_in_seconds(5.0)
-                            .show_progress(true),
-                        ..Default::default()
-                    })
-                },
-                UpdateInfo::LatestVersion => {
+
+        self.check_for_update.check_complete();
+
+        if let Some(result) = self.check_for_update.take_if_done() {
+            match result {
+                Ok(UpdateInfo::LatestVersion) => {
                     toasts.add(Toast {
                         text: "No updates available.".into(),
                         kind: ToastKind::Info,
@@ -192,10 +175,20 @@ impl eframe::App for App {
                         ..Default::default()
                     })
                 }
-                UpdateInfo::UpdateAvailable(latest) => {
+                Ok(UpdateInfo::UpdateAvailable(latest)) => {
                     toasts.add(Toast {
                         text: format!("Update to version {latest} available.").into(),
                         kind: ToastKind::Warning,
+                        ..Default::default()
+                    })
+                }
+                Err(()) => {
+                    toasts.add(Toast {
+                        text: "Could not fetch updates.".into(),
+                        kind: ToastKind::Warning,
+                        options: ToastOptions::default()
+                            .duration_in_seconds(5.0)
+                            .show_progress(true),
                         ..Default::default()
                     })
                 }
@@ -359,71 +352,6 @@ impl eframe::App for App {
     }
 
     fn persist_egui_memory(&self) -> bool { false }
-}
-
-#[derive(Clone)]
-struct Progress {
-    context: Context,
-    contents: Arc<(AtomicU32, Mutex<String>)>,
-    local_progress: Cell<f32>
-}
-
-impl Progress {
-    fn set_text(&self, text: String) {
-        let mut lock = self.contents.1.lock().unwrap();
-        *lock = text;
-        self.context.request_repaint_after(Duration::from_millis(16));
-    }
-
-    fn reset_progress(&self) {
-        self.local_progress.set(0.0);
-        self.contents.0.store(0.0f32.to_bits(), Ordering::SeqCst);
-    }
-
-    fn set(&self, amount: f32) {
-        if (amount * 100.0).floor() > (self.local_progress.get() * 100.0).floor() {
-            self.local_progress.set(amount);
-            self.contents.0.store(amount.to_bits(), Ordering::SeqCst);
-            self.context.request_repaint_after(Duration::from_millis(16));
-        }
-    }
-}
-
-struct ProgressTask<T> {
-    handle: JoinHandle<T>,
-    progress: Progress
-}
-
-impl<T> ProgressTask<T> where T: Send + 'static {
-    fn new(ctx: &Context, f: impl FnOnce(&Progress) -> T + Send + 'static) -> ProgressTask<T> {
-        let progress = Progress {
-            context: ctx.clone(),
-            contents: Arc::new((0.into(), Mutex::new("".into()))),
-            local_progress: Cell::new(0.0)
-        };
-        // let progress = Progress(Arc::new(Mutex::new((ctx.clone(), 0.0, "".to_string()))));
-        let progress_clone = progress.clone();
-
-        let handle = std::thread::spawn(move || {
-            let res = f(&progress_clone);
-            progress_clone.context.request_repaint_after(Duration::from_millis(16));
-            res
-        });
-
-        ProgressTask { handle, progress }
-    }
-
-    fn is_finished(&self) -> bool {
-        self.handle.is_finished()
-    }
-
-    fn progress(&self) -> f32 {
-        f32::from_bits(self.progress.contents.0.load(Ordering::SeqCst))
-    }
-
-    fn text(&self) -> String {
-        self.progress.contents.1.lock().unwrap().clone()
-    }
 }
 
 

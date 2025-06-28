@@ -8,7 +8,7 @@ use eframe::Storage;
 use dataframe::{DataFrameView, VirtualColumn};
 
 use crate::UpdateContext;
-use crate::{ProgressTask, Progress};
+use crate::computation::{ProgressTask, Progress};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 enum StepType {

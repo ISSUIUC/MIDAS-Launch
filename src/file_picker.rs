@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use egui::{Align, Color32, Layout, Response, RichText, Sense, Ui};
+use egui::{Align, Color32, Context, Layout, Response, RichText, Sense, Ui};
 use egui_extras::Column;
 use futures_lite::future::block_on;
 use rfd::AsyncFileDialog;
 
-use launch_file::{FormatType, LogFormat};
+use launch_file::FormatType;
+use crate::computation::Computation;
 
 type FilePickerHandle = Option<JoinHandle<Option<PathBuf>>>;
 
@@ -106,64 +107,25 @@ struct MultipleFilePickerData {
     file_dialog_handle: Option<JoinHandle<Option<Vec<SelectedPath>>>>
 }
 
-pub enum HeaderReadingStatus {
-    InProgress(JoinHandle<Result<FormatType, String>>),
-    HeaderType(FormatType),
-    Error(String)
-}
-
-impl HeaderReadingStatus {
-    pub fn checksum(&self) -> Option<u32> {
-        match self {
-            HeaderReadingStatus::HeaderType(FormatType::External { checksum }) => Some(*checksum),
-            _ => None,
-        }
-    }
-
-    pub fn inline_header(&self) -> Option<&Arc<LogFormat>> {
-        match self {
-            HeaderReadingStatus::HeaderType(FormatType::Inline(format)) => Some(format),
-            _ => None
-        }
-    }
-
-    fn is_done(&self) -> bool {
-        if let HeaderReadingStatus::InProgress(handle) = self {
-            handle.is_finished()
-        } else {
-            false
-        }
-    }
-
-    fn unwrap_handle(&mut self) -> Option<JoinHandle<Result<FormatType, String>>> {
-        if let HeaderReadingStatus::InProgress(_) = self {
-            let HeaderReadingStatus::InProgress(handle) = std::mem::replace(self, HeaderReadingStatus::Error(String::new())) else { unreachable!() };
-            Some(handle)
-        } else {
-            None
-        }
-    }
-}
-
 pub struct SelectedPath {
     pub path: PathBuf,
     pub short_name: String,
-    pub format_status: HeaderReadingStatus
+    pub loading_format: Computation<FormatType, String>
 }
 
 impl SelectedPath {
-    pub fn from_path(path: impl Into<PathBuf>) -> SelectedPath {
+    pub fn from_path(ctx: Context, path: impl Into<PathBuf>) -> SelectedPath {
         let path = path.into();
         let short_name = path.file_name().map_or(String::new(), |name| name.to_string_lossy().into_owned());
-        let format_status = HeaderReadingStatus::InProgress(thread::spawn({
+        let format_status = Computation::begin_new(ctx, {
             let path = path.clone();
             move || {
                 let mut file = File::open(&path).map_err(|_| "Could not open file.".to_string())?;
                 FormatType::from_file(&mut file).map_err(|_| "Could not open file.".to_string())
             }
-        }));
+        });
 
-        SelectedPath { path, short_name, format_status }
+        SelectedPath { path, short_name, loading_format: format_status }
     }
 }
 
@@ -241,6 +203,8 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                 })
                 .body(|mut body| {
                     for path in self.paths.iter_mut() {
+                        path.loading_format.check_complete();
+
                         body.row(20.0, |mut row| {
                             let row_index = row.index();
 
@@ -252,20 +216,13 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                                 ui.horizontal_centered(|ui| ui.add(egui::Label::new(&path.short_name).selectable(false).truncate()));
                             });
                             row.col(|ui| {
-                                if path.format_status.is_done() {
-                                    let handle = path.format_status.unwrap_handle().unwrap();
-                                    match handle.join().unwrap() {
-                                        Ok(header_type) => path.format_status = HeaderReadingStatus::HeaderType(header_type),
-                                        Err(message) => path.format_status = HeaderReadingStatus::Error(message),
-                                    }
-                                }
                                 ui.horizontal_centered(|ui| {
-                                    match &path.format_status {
-                                        HeaderReadingStatus::InProgress(_) => {
+                                    match &path.loading_format {
+                                        Computation::Empty | Computation::Computing(_) => {
                                             ui.spinner();
                                         },
-                                        HeaderReadingStatus::HeaderType(checksum) => {
-                                            match checksum {
+                                        Computation::Ok(format_type) => {
+                                            match format_type {
                                                 FormatType::External { checksum } => {
                                                     ui.add(egui::Label::new(format!("0x{:0>8x}", checksum)).selectable(false));
                                                 }
@@ -274,7 +231,7 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                                                 }
                                             }
                                         }
-                                        HeaderReadingStatus::Error(message) => {
+                                        Computation::Err(message) => {
                                             ui.add(egui::Label::new(RichText::new(message).color(Color32::RED)).truncate().selectable(false));
                                         }
                                     }
@@ -311,12 +268,10 @@ impl<'a> egui::Widget for MultipleFilePicker<'a> {
                     let pick_task = self.async_file_dialog.pick_files();
 
                     file_picker_data.file_dialog_handle = Some(thread::spawn(move || {
-                        let file_paths = block_on(pick_task)
+                        block_on(pick_task)
                             .map(|handles|
-                                handles.into_iter().map(|handle| SelectedPath::from_path(handle.path())).collect()
-                            );
-                        ctx_clone.request_repaint_after(Duration::from_millis(100));
-                        file_paths
+                                handles.into_iter().map(|handle| SelectedPath::from_path(ctx_clone.clone(), handle.path())).collect()
+                            )
                     }));
                 }
 
