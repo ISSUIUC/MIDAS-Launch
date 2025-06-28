@@ -2,6 +2,18 @@
 
 This record is incomplete. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.10/). I use [Semantic Version](https://semver.rg/spec/v2.0.0.html) to the best of my ability and specifically reject [ZeroVer](https://0ver.org/).
 
+## 1.7.0 (2025-06-28)
+
+### Added 
+- Check for updates on app startup
+
+### Changed
+- Update MSRV and some crates
+
+### Fixed
+- Numerous internal refactorings
+- Typo in README
+
 ## 1.6.0 (2025-03-22)
 
 ### Added
