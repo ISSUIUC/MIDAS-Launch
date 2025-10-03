@@ -97,7 +97,7 @@ impl ExportTab {
                                 //declared python mut file so python gets the data as well
                                 let log_file = File::create("python_output.log")?;
                                 let mut child = Command::new("python3")
-                                    .arg("python_scripts/makecsv.py") // adjust path if needed
+                                    .arg("PythonScripts/makecsv.py") // adjust path if needed
                                     .stdin(Stdio::piped())
                                     .stdout(Stdio::from(log_file))
                                     .spawn()?;
