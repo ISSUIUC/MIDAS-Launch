@@ -1,4 +1,5 @@
-import sys
+INPUT_FILE = "data.csv"
+OUTPUT_FILE = "output.csv"
 
 log = open("python_output.log", "a")
 
@@ -7,21 +8,13 @@ def log_print(*args):
     print(*args, file=log)
     log.flush()
 
-# input_text = sys.stdin.read().splitlines()
-
-# for line in sys.stdin:
-#     line = line.strip()
-#     if line.startswith("HEADERS:"):
-#         log_print("Got headers:", line[len("HEADERS:"):])
-#     elif line.startswith("ROW:"):
-#         log_print("Got row:", line[len("ROW:"):])
 
 data = []
 
-print("Execution started")
+log_print("Execution started")
 
-with open("data.csv", "r") as f:
-    print("File loaded")
+with open(INPUT_FILE, "r") as f:
+    log_print("File loaded")
     data = f.read().splitlines()
 
 print("Data loaded")
@@ -56,19 +49,12 @@ for i, line in enumerate(data_arrays):
         if datapoint != "":
             lines_to_cols[-1].append(j + 3)
 
-print("Helper stuff done")
+log_print("Helper stuff done")
 
 # print(times_to_lines)
 
 
 
-# for i, line in enumerate(data_arrays):
-#     lines_to_cols.append([])
-#     for j, datapoint in enumerate(line[3:]):
-#         if datapoint != "":
-#             lines_to_cols[-1].append(j + 3)
-
-# # print(lines_to_cols)
 
 
 final_arrays = [headers]
@@ -86,12 +72,12 @@ for time, lines in times_to_lines.items():
     # final_arrays.append(this_line)
     final_str += f"{','.join(this_line)}\n"
 
-print("Outputting to file")
+log_print("Outputting to file")
 
 # print(final_arrays)
 # for arr in final_arrays:
 #     final_str += f"{','.join(arr)}\n"
 
 
-with open("output.csv", "w") as f:
-    print(final_str, file=f)
+with open(OUTPUT_FILE, "w") as f:
+    f.write(final_str)
