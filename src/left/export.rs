@@ -96,7 +96,7 @@ impl ExportTab {
 
                                 //declared python mut file so python gets the data as well
                                 let log_file = File::create("python_output.log")?;
-                                let mut child = Command::new("python3")
+                                let mut child = Command::new("python")
                                     .arg("PythonScripts/makecsv.py") // adjust path if needed
                                     .stdin(Stdio::piped())
                                     .stdout(Stdio::from(log_file))
@@ -127,7 +127,7 @@ impl ExportTab {
                                 }
 
                                 //send those same headers to python
-                                writeln!(py_stdin, "HEADERS:{}", data.col_names().collect::<Vec<_>>().join(","))?;
+                                writeln!(py_stdin, "{}", data.col_names().collect::<Vec<_>>().join(","))?;
 
                                 let total_rows = data.shape().rows;
                                 for idx in 0..total_rows {
@@ -154,7 +154,7 @@ impl ExportTab {
 
 
                                     //send row to Python
-                                    writeln!(py_stdin, "ROW:{}", row_str)?;
+                                    writeln!(py_stdin, "{}", row_str)?;
 
                                     progress.set(idx as f32 / total_rows as f32);
                                 }
