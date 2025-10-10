@@ -97,12 +97,13 @@ impl ExportTab {
                                 //declared python mut file so python gets the data as well
                                 let log_file = File::create("python_output.log")?;
                                 let mut child = Command::new("python")
-                                    .arg("PythonScripts/makecsv.py") // adjust path if needed
+                                    .args(["PythonScript/makecsv.py", path.to_str().unwrap()]) // adjust path if needed
                                     .stdin(Stdio::piped())
                                     .stdout(Stdio::from(log_file))
                                     .spawn()?;
                                     
 
+                                {
                                 let mut py_stdin = child.stdin.take().expect("Failed to open stdin for Python");
 
                                 let mut file;
@@ -140,17 +141,17 @@ impl ExportTab {
 
                                     let mut row_iterator = data.row(idx).iter();
 
-                                    if let Some(data) = row_iterator.next() {
+                                    // if let Some(data) = row_iterator.next() {
 
-                                        //row_str.push_str(&data.to_string()); //i hope this doesnt break
-                                        //writeln!(&mut file, "{}", row_str)?;
-                                        write!(&mut file, "{}", data)?;
+                                    //     //row_str.push_str(&data.to_string()); //i hope this doesnt break
+                                    //     //writeln!(&mut file, "{}", row_str)?;
+                                    //     write!(&mut file, "{}", data)?;
 
-                                        while let Some(data) = row_iterator.next() {
-                                            write!(&mut file, ",{}", data)?;
-                                        }
-                                    }
-                                    file.write(&[b'\n'])?;
+                                    //     while let Some(data) = row_iterator.next() {
+                                    //         write!(&mut file, ",{}", data)?;
+                                    //     }
+                                    // }
+                                    // file.write(&[b'\n'])?;
 
 
                                     //send row to Python
@@ -158,8 +159,12 @@ impl ExportTab {
 
                                     progress.set(idx as f32 / total_rows as f32);
                                 }
+                            
+                                // py_stdin.flush();
+                                // py_stdin.
 
                                 file.flush()?;
+                            }
                                 child.wait()?;
 
                                 Ok(())

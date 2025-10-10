@@ -1,5 +1,9 @@
-INPUT_FILE = "data.csv"
-OUTPUT_FILE = "output.csv"
+import sys
+
+
+
+# INPUT_FILE = "data.csv"
+OUTPUT_FILE = sys.argv[1]
 
 log = open("python_output.log", "a")
 
@@ -13,7 +17,8 @@ data = []
 
 log_print("Execution started")
 
-with open(INPUT_FILE, "r") as f:
+# with open(INPUT_FILE, "r") as f:
+with sys.stdin as f:
     log_print("File loaded")
     data = f.read().splitlines()
 
@@ -81,3 +86,5 @@ log_print("Outputting to file")
 
 with open(OUTPUT_FILE, "w") as f:
     f.write(final_str)
+
+# print(final_str)
