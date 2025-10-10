@@ -2,6 +2,10 @@ use std::fs::{File, OpenOptions};
 use std::{io, io::Write};
 use std::io::BufWriter;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
+
+//Make some python script that takes the weird broken exported data and 
+//transforms it into a beautiful thing that makes gnc and structures happy
 
 use egui::{Color32, Ui};
 use eframe::Storage;
@@ -39,6 +43,7 @@ impl ExportTab {
 
                 export: None,
                 msg: None
+
             }
         }
     }
@@ -88,13 +93,29 @@ impl ExportTab {
                             let is_append = self.csv.append_mode;
 
                             self.csv.export = Some(ProgressTask::new(ui.ctx(), move |progress| {
+
+                                //declared python mut file so python gets the data as well
+                                let log_file = File::create("python_output.log")?;
+                                let mut child = Command::new("python")
+                                    .args(["PythonScript/makecsv.py", path.to_str().unwrap()]) // adjust path if needed
+                                    .stdin(Stdio::piped())
+                                    .stdout(Stdio::from(log_file))
+                                    .spawn()?;
+                                    
+
+                                {
+                                let mut py_stdin = child.stdin.take().expect("Failed to open stdin for Python");
+
                                 let mut file;
-                                if is_append {
+
+                                if is_append {//if currently adding already
+
                                     file = BufWriter::new(OpenOptions::new().write(true).append(true).open(&path)?);
-                                } else {
+
+                                } else {//if new file has to be made
                                     file = BufWriter::new(File::create(&path)?);
 
-                                    let mut col_iterator = data.col_names();
+                                    let mut col_iterator = data.col_names(); //go thru columns and add col names
                                     if let Some(name) = col_iterator.next() {
                                         write!(&mut file, "{}", name)?;
 
@@ -102,26 +123,49 @@ impl ExportTab {
                                             write!(&mut file, ",{}", name)?;
                                         }
 
-                                        file.write(&[b'\n'])?;
+                                        file.write(&[b'\n'])?; //write those names
                                     }
                                 }
+
+                                //send those same headers to python
+                                writeln!(py_stdin, "{}", data.col_names().collect::<Vec<_>>().join(","))?;
 
                                 let total_rows = data.shape().rows;
                                 for idx in 0..total_rows {
-                                    let mut row_iterator = data.row(idx).iter();
-                                    if let Some(data) = row_iterator.next() {
-                                        write!(&mut file, "{}", data)?;
 
-                                        while let Some(data) = row_iterator.next() {
-                                            write!(&mut file, ",{}", data)?;
-                                        }
-                                    }
-                                    file.write(&[b'\n'])?;
+                                    let row_str = data.row(idx)
+                                        .iter()
+                                        .map(|v| v.to_string())
+                                        .collect::<Vec<_>>()
+                                        .join(",");
+
+                                    let mut row_iterator = data.row(idx).iter();
+
+                                    // if let Some(data) = row_iterator.next() {
+
+                                    //     //row_str.push_str(&data.to_string()); //i hope this doesnt break
+                                    //     //writeln!(&mut file, "{}", row_str)?;
+                                    //     write!(&mut file, "{}", data)?;
+
+                                    //     while let Some(data) = row_iterator.next() {
+                                    //         write!(&mut file, ",{}", data)?;
+                                    //     }
+                                    // }
+                                    // file.write(&[b'\n'])?;
+
+
+                                    //send row to Python
+                                    writeln!(py_stdin, "{}", row_str)?;
 
                                     progress.set(idx as f32 / total_rows as f32);
                                 }
+                            
+                                // py_stdin.flush();
+                                // py_stdin.
 
                                 file.flush()?;
+                            }
+                                child.wait()?;
 
                                 Ok(())
                             }));
