@@ -662,6 +662,7 @@ BASE_TYPES: dict[str, Type] = {
     'char': Integer(1),
     'float': Float(4),
     'int': Integer(4, signed=False),
+    'uint8_t': Integer(1, signed=False),
     'uint16_t': Integer(4, signed=False),
     'uint32_t': Integer(4, signed=False),
     'uint64_t': Integer(8, signed=False),
